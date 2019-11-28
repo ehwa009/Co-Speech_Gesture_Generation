@@ -49,11 +49,11 @@ def train(model, training_data, validation_data, optim, device, opt):
     log_valid_file = None
 
     if opt.log:
-        log_train_file = opt.log + 'train.log'
-        log_valid_file = opt.log + 'valid.log'
+        log_train_file = opt.log + '{}_train.log'.format(opt.model)
+        log_valid_file = opt.log + '{}_valid.log'.format(opt.model)
 
         print('[INFO] Training performance will be written to file: {} and {}'.format(
-            log_train_file, log_valid_file))
+                                                            log_train_file, log_valid_file))
 
         with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
             log_tf.write('epoch,loss\n')
@@ -75,6 +75,7 @@ def train(model, training_data, validation_data, optim, device, opt):
 
         valid_loss_list += [valid_loss]
 
+        # define parameter to save trained model
         model_state_dict = model.state_dict()
         checkpoint = {
             'model': model_state_dict,
@@ -119,7 +120,7 @@ def eval_epoch(model, validation_data, device, opt):
                 tgt_seq = tgt_seq.to(device)
                 
                 # predict
-                if opt.model == "transformer":
+                if opt.model == "transformer": # todo
                     pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
                 elif opt.model == 'seq2pos':
                     pred, ans = model(opt, src_seq, src_len, tgt_seq, device)
@@ -137,6 +138,9 @@ def eval_epoch(model, validation_data, device, opt):
 def train_epoch(model, training_data, optim, device, opt):
     model.train()
 
+    # zero gradients
+    optim.zero_grad()
+
     total_loss = 0
     for batch in tqdm(training_data, mininterval=2, desc=' - (Training)', leave=False):
         batch_loss = 0
@@ -146,7 +150,7 @@ def train_epoch(model, training_data, optim, device, opt):
             tgt_seq = tgt_seq.to(device)
             
             # predict
-            if opt.model == "transformer":
+            if opt.model == "transformer": # todo
                 pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
             elif opt.model == 'seq2pos':
                 pred, ans = model(opt, src_seq, src_len, tgt_seq, device)
@@ -217,7 +221,7 @@ def main():
     parser.add_argument('-estimation_motions', type=int, default=20)
     parser.add_argument('-frame_duration', type=int, default=1/12)
     parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps
-    parser.add_argument('-model', default='seq2pos')
+    parser.add_argument('-model', default='transformer')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
     parser.add_argument('-save_interval', type=int, default=20)
