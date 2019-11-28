@@ -9,7 +9,7 @@ import math
 
 from torch import optim
 from tqdm import tqdm
-from dataset_todo import TedDataset, collate_fn
+from dataset import TedDataset, collate_fn
 from functools import partial
 from transformer.models import Transformer
 from seq2pose.models import Seq2Pose
@@ -20,7 +20,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 torch.backends.cudnn.benchmark = True
 
 
-def cust_loss(output, target):
+def cust_loss(output, target, alpha, beta):
     n_element = output.numel()
     
     # mse
@@ -37,7 +37,7 @@ def cust_loss(output, target):
     var_loss /= 1
 
     # final loss
-    loss = mse_loss + cont_loss + var_loss
+    loss = mse_loss + alpha * cont_loss + beta * var_loss
 
     return loss
 
@@ -56,8 +56,8 @@ def train(model, training_data, validation_data, optim, device, opt):
             log_train_file, log_valid_file))
 
         with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
-            log_tf.write('epoch,loss,ppl\n')
-            log_vf.write('epoch,loss,ppl\n')
+            log_tf.write('epoch,loss\n')
+            log_vf.write('epoch,loss\n')
 
     valid_loss_list = []
     for epoch_i in range(opt.epoch):
@@ -65,13 +65,13 @@ def train(model, training_data, validation_data, optim, device, opt):
 
         start = time.time()
         train_loss = train_epoch(model, training_data, optim, device, opt)
-        print('\t- (Training)   loss: {loss: 8.5f}, ppl: {ppl: 8.5f}, elapse: {elapse:3.3f}'.format(
-                                    loss=train_loss, ppl=math.exp(min(train_loss, 100)), elapse=(time.time()-start)/60))
+        print('\t- (Training)   loss: {loss: 8.5f}, elapse: {elapse:3.3f}'.format(
+                                    loss=train_loss, elapse=(time.time()-start)/60))
 
         start = time.time()
         valid_loss = eval_epoch(model, validation_data, device, opt)
-        print('\t- (Validation)   loss: {loss: 8.5f}, ppl: {ppl: 8.5f}, elapse: {elapse:3.3f}'.format(
-                                    loss=valid_loss, ppl=math.exp(min(valid_loss, 100)), elapse=(time.time()-start)/60))
+        print('\t- (Validation)   loss: {loss: 8.5f}, elapse: {elapse:3.3f}'.format(
+                                    loss=valid_loss, elapse=(time.time()-start)/60))
 
         valid_loss_list += [valid_loss]
 
@@ -81,6 +81,7 @@ def train(model, training_data, validation_data, optim, device, opt):
             'settings': opt,
             'epoch': epoch_i
         }
+
         if opt.save_model:
             if opt.save_mode == 'all':
                 model_name = opt.save_model + '_tr_loss_{train_loss: 3.3f}.chkpt'.format(
@@ -99,16 +100,16 @@ def train(model, training_data, validation_data, optim, device, opt):
 
         if log_train_file and log_valid_file:
             with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
-                log_tf.write('{epoch},{loss: 8.5f},{ppl: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=train_loss, ppl=math.exp(min(train_loss, 100))))
-                log_vf.write('{epoch},{loss: 8.5f},{ppl: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=valid_loss, ppl=math.exp(min(valid_loss, 100))))
+                log_tf.write('{epoch},{loss: 8.5f}\n'.format(
+                    epoch=epoch_i, loss=train_loss))
+                log_vf.write('{epoch},{loss: 8.5f}\n'.format(
+                    epoch=epoch_i, loss=valid_loss))
+
 
 def eval_epoch(model, validation_data, device, opt):
     model.eval()
 
     total_loss = 0
-
     with torch.no_grad():
         for batch in tqdm(validation_data, mininterval=2, desc=' - (Validation)', leave=False):
             batch_loss = 0
@@ -121,13 +122,14 @@ def eval_epoch(model, validation_data, device, opt):
                 if opt.model == "transformer":
                     pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
                 elif opt.model == 'seq2pos':
-                    pred, tar = model(opt, src_seq, src_len, tgt_seq, device)
-                    loss = cust_loss(pred, tar)
+                    pred, ans = model(opt, src_seq, src_len, tgt_seq, device)
+                    loss = cust_loss(pred, ans, opt.alpha, opt.beta)
 
                     # note keeping
                     batch_loss += loss.item()
                     n_motion += 1
-            total_loss += batch_loss/n_motion
+            
+            total_loss += batch_loss/(n_motion * len(tgt_seq))
         
         return total_loss
 
@@ -136,7 +138,6 @@ def train_epoch(model, training_data, optim, device, opt):
     model.train()
 
     total_loss = 0
-
     for batch in tqdm(training_data, mininterval=2, desc=' - (Training)', leave=False):
         batch_loss = 0
         n_motion = 0
@@ -148,21 +149,21 @@ def train_epoch(model, training_data, optim, device, opt):
             if opt.model == "transformer":
                 pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
             elif opt.model == 'seq2pos':
-                pred, tar = model(opt, src_seq, src_len, tgt_seq, device)
-                loss = cust_loss(pred, tar)
+                pred, ans = model(opt, src_seq, src_len, tgt_seq, device)
+                loss = cust_loss(pred, ans, opt.alpha, opt.beta)
                 loss.backward()
 
-                # optimize
-                optim.step()
+            # optimize
+            optim.step()
 
-                # note keeping
-                batch_loss += loss.item()
-                n_motion += 1
-        total_loss += batch_loss/n_motion
+            # note keeping
+            batch_loss += loss.item()
+            n_motion += 1
+        
+        total_loss += batch_loss/(n_motion * len(tgt_seq))
     
     return total_loss
-        
-
+    
 
 def display_pca_subspace(data):
     pca = data['pca']
@@ -193,7 +194,9 @@ def main():
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
     parser.add_argument('-epoch', type=int, default=530)
     parser.add_argument('-batch_size', type=int, default=256)
-    parser.add_argument('-n_workers', type=int, default=7)
+    parser.add_argument('-n_workers', type=int, default=0)
+    parser.add_argument('-alpha', type=int, default=0.1)
+    parser.add_argument('-beta', type=int, default=1)
 
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)
@@ -215,7 +218,7 @@ def main():
     parser.add_argument('-frame_duration', type=int, default=1/12)
     parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps
     parser.add_argument('-model', default='seq2pos')
-    parser.add_argument('-save_model', default='./trained_model/')
+    parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
     parser.add_argument('-save_interval', type=int, default=20)
 
