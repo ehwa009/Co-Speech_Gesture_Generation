@@ -130,7 +130,7 @@ def eval_epoch(model, validation_data, device, opt):
                     batch_loss += loss.item()
                     n_motion += 1
             
-            total_loss += batch_loss/(n_motion * len(tgt_seq))
+            total_loss += batch_loss/n_motion
         
         return total_loss
 
@@ -164,7 +164,7 @@ def train_epoch(model, training_data, optim, device, opt):
             batch_loss += loss.item()
             n_motion += 1
         
-        total_loss += batch_loss/(n_motion * len(tgt_seq))
+        total_loss += batch_loss/n_motion
     
     return total_loss
     
@@ -207,7 +207,7 @@ def main():
     parser.add_argument('-tf_ratio', type=int, default=0.5)
     parser.add_argument('-lr', type=int, default=0.0001)
 
-    parser.add_argument('-n_layers', type=int, default=2)
+    parser.add_argument('-n_layers', type=int, default=6)
 
     parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
