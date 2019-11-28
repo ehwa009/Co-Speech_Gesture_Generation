@@ -1,0 +1,5 @@
+data/*.*
+log/*.*
+processed_data/*.*
+trained_model/*.*
+__pycache__
