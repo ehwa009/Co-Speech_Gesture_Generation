@@ -149,6 +149,8 @@ def train_epoch(model, training_data, optim, device, opt):
             # processed dataset
             src_seq = src_seq.to(device)
             tgt_seq = tgt_seq.to(device)
+            src_pos = src_pos.to(device)
+            tgt_pos = tgt_pos.to(device)
             
             # predict
             if opt.model == "transformer": # todo
@@ -196,39 +198,40 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-see_pca', type=bool, default=False)
     
+    # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
     parser.add_argument('-epoch', type=int, default=530)
-    parser.add_argument('-batch_size', type=int, default=256)
+    parser.add_argument('-batch_size', type=int, default=1)
     parser.add_argument('-n_workers', type=int, default=0)
+    parser.add_argument('-dropout', type=int, default=0.1)
+    parser.add_argument('-model', default='transformer')
+    parser.add_argument('-save_model', default='./trained_model/seq2pos')
+    parser.add_argument('-save_mode', default='interval')
+    parser.add_argument('-save_interval', type=int, default=20)
+    parser.add_argument('-log', default='./log/')
+    parser.add_argument('-lr', type=int, default=0.0001)
+    
+    # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
     parser.add_argument('-beta', type=int, default=1)
-
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)
     parser.add_argument('-tf_ratio', type=int, default=0.5)
-    parser.add_argument('-lr', type=int, default=0.0001)
-
-    parser.add_argument('-n_layers', type=int, default=2)
-
-    parser.add_argument('-d_model', type=int, default=512)
-    parser.add_argument('-d_inner_hid', type=int, default=2048)
-    parser.add_argument('-d_k', type=int, default=64)
-    parser.add_argument('-d_v', type=int, default=64)
-
-    parser.add_argument('-n_head', type=int, default=8)
-    parser.add_argument('-dropout', type=int, default=0.1)
-
+    parser.add_argument('-n_enc_layers', type=int, default=2)
+    parser.add_argument('-n_dec_layers', type=int, default=1)
     parser.add_argument('-pre_motions', type=int, default=10)
     parser.add_argument('-estimation_motions', type=int, default=20)
     parser.add_argument('-frame_duration', type=int, default=1/12)
     parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps
-    parser.add_argument('-model', default='seq2pos')
-    parser.add_argument('-save_model', default='./trained_model/seq2pos')
-    parser.add_argument('-save_mode', default='interval')
-    parser.add_argument('-save_interval', type=int, default=20)
 
-    parser.add_argument('-log', default='./log/')
-
+    # transformer args
+    parser.add_argument('-n_layers', type=int, default=6)
+    parser.add_argument('-d_model', type=int, default=512)
+    parser.add_argument('-d_inner_hid', type=int, default=2048)
+    parser.add_argument('-d_k', type=int, default=64)
+    parser.add_argument('-d_v', type=int, default=64)
+    parser.add_argument('-n_head', type=int, default=8)
+    
     opt = parser.parse_args()
 
     ############################################
@@ -269,7 +272,8 @@ def main():
         model = Seq2Pose(word_emb=data['emb_tbl'], 
                         batch_size=opt.batch_size, 
                         hidden_size=opt.hidden_size, 
-                        n_layers=opt.n_layers,
+                        n_enc_layers=opt.n_enc_layers,
+                        n_dec_layers=opt.n_dec_layers,
                         bidirectional=opt.bidirectional,
                         dropout=opt.dropout,
                         out_dim = data['pca'].n_components).to(device)

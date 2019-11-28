@@ -38,7 +38,7 @@ def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
 def get_attn_key_pad_mask(seq_k, seq_q):
     len_q = seq_q.size(1)
     padding_mask = seq_k.eq(Constants.PAD)
-    padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)
+    padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1) # b x lq x lk
 
     return padding_mask
 

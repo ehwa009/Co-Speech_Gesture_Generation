@@ -158,8 +158,8 @@ class BahdanauAttnDecoderRNN(nn.Module):
 
 class Seq2Pose(nn.Module):
 
-    def __init__(self, word_emb, batch_size, hidden_size, bidirectional, n_layers,
-                dropout, out_dim):
+    def __init__(self, word_emb, batch_size, hidden_size, bidirectional, 
+                n_enc_layers, n_dec_layers, dropout, out_dim):
         super().__init__()
 
         self.encoder = EncoderRNN(
@@ -167,14 +167,14 @@ class Seq2Pose(nn.Module):
                        input_size=word_emb.shape[1],
                        hidden_size=hidden_size,
                        bidirectional=bidirectional,
-                       n_layers=n_layers,
+                       n_layers=n_enc_layers,
                        dropout=dropout)
 
         self.decoder = BahdanauAttnDecoderRNN(
                         input_size=out_dim,
                         hidden_size=hidden_size,
                         output_size=out_dim,
-                        n_layers=n_layers,
+                        n_layers=n_dec_layers,
                         dropout=dropout)
 
     def forward(self, opt, src_seq, src_len, tgt_seq, device):
