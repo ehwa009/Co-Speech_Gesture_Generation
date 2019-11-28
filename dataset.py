@@ -40,7 +40,9 @@ class TedDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return self._src_insts[idx], self._tgt_insts[idx]
 
-
+####################################################################
+#                         PREPROCESSING                            #
+####################################################################
 def paired_collate_fn(insts, opt):
     seq_pairs = sorted(insts, key=lambda p: len(p[0]), reverse=True)
     src_insts, tgt_insts = list(zip(*seq_pairs))
@@ -48,9 +50,6 @@ def paired_collate_fn(insts, opt):
     max_src_len = max(len(inst) for inst in src_insts)
     max_tgt_len = max(len(inst) for inst in tgt_insts)
 
-    ####################################################################
-    #                         PREPROCESSING                            #
-    ####################################################################
     frame_duration = opt.frame_duration
     sp_duration = max_src_len / opt.speech_sp
 
@@ -103,8 +102,8 @@ def paired_collate_fn(insts, opt):
 
         # transpose and append data
         
-        sample_seq = np.transpose(sample_seq, (1, 0))
-        sample_pos = np.transpose(sample_pos, (1, 0, 2))
+        # sample_seq = np.transpose(sample_seq, (1, 0))
+        # sample_pos = np.transpose(sample_pos, (1, 0, 2))
 
         src_seqs.append(torch.LongTensor(sample_seq))
         tgt_seqs.append(torch.LongTensor(sample_pos))

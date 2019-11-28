@@ -94,7 +94,7 @@ def train(model, training_data, validation_data, optim, device, opt):
                     torch.save(checkpoint, model_name)
                     print('\t[INFO] The checkpoint file has been updated.')
             elif opt.save_mode == 'interval':
-                if epoch_i % opt.save_interval: 
+                if epoch_i % opt.save_interval == 0: 
                     model_name = opt.save_model + '_train_loss_{train_loss: 3.3f}.chkpt'.format(
                                                                                 train_loss=train_loss)
                     torch.save(checkpoint, model_name)
@@ -138,14 +138,15 @@ def eval_epoch(model, validation_data, device, opt):
 def train_epoch(model, training_data, optim, device, opt):
     model.train()
 
-    # zero gradients
-    optim.zero_grad()
-
     total_loss = 0
     for batch in tqdm(training_data, mininterval=2, desc=' - (Training)', leave=False):
         batch_loss = 0
         n_motion = 0
         for src_seq, src_len, src_pos, tgt_seq, tgt_pos in batch:
+            # make gradient zero
+            optim.zero_grad()
+            
+            # processed dataset
             src_seq = src_seq.to(device)
             tgt_seq = tgt_seq.to(device)
             
@@ -207,7 +208,7 @@ def main():
     parser.add_argument('-tf_ratio', type=int, default=0.5)
     parser.add_argument('-lr', type=int, default=0.0001)
 
-    parser.add_argument('-n_layers', type=int, default=6)
+    parser.add_argument('-n_layers', type=int, default=2)
 
     parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
@@ -221,7 +222,7 @@ def main():
     parser.add_argument('-estimation_motions', type=int, default=20)
     parser.add_argument('-frame_duration', type=int, default=1/12)
     parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps
-    parser.add_argument('-model', default='transformer')
+    parser.add_argument('-model', default='seq2pos')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
     parser.add_argument('-save_interval', type=int, default=20)

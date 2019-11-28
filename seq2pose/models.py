@@ -103,7 +103,8 @@ class BahdanauAttnDecoderRNN(nn.Module):
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(inplace=True)
         )
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout)
+        self.gru = nn.GRU(hidden_size, hidden_size, 
+                        n_layers, dropout=dropout)
         # self.out = nn.Linear(hidden_size * 2, output_size)
         self.out = nn.Linear(hidden_size, output_size)
 
@@ -177,6 +178,10 @@ class Seq2Pose(nn.Module):
                         dropout=dropout)
 
     def forward(self, opt, src_seq, src_len, tgt_seq, device):
+        # transpose
+        src_seq = src_seq.permute(1, 0)
+        tgt_seq = tgt_seq.permute(1, 0, 2)
+
         enc_out, enc_hid = self.encoder(src_seq, src_len)
         dec_hid = enc_hid[:self.decoder.n_layers]
         all_decoder_outputs = torch.zeros(tgt_seq.size(0), 
