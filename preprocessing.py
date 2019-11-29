@@ -2,10 +2,13 @@ import argparse
 import torch
 import pickle
 import math
-import transformer.constant as Constants
+import constant as Constants
 import numpy as np
-from tqdm import tqdm
+import matplotlib.pyplot as plt
+import random
 
+from tqdm import tqdm
+from plot import display_multi_poses
 from sklearn.decomposition import PCA
 from sklearn import preprocessing
 
@@ -88,57 +91,65 @@ def get_data(data, sampling_rate):
         for p in poses:
             # remove if there is 0 value in poses
             if not(0 in p):
-                # make shoulder has same value
-                diff_neck = p[4] - sh_pos_y
-                diff_sh_1 = p[16] - sh_pos_y
-                diff_sh_2 = p[7] - sh_pos_y
-
-                p[4] = sh_pos_y
-                p[7] = sh_pos_y
-                p[16] = sh_pos_y
-
-                p[1] = p[1] - diff_neck
-                p[10] = p[10] - diff_sh_2
-                p[13] = p[13] - diff_sh_2
-                p[19] = p[19] - diff_sh_1
-                p[22] = p[22] - diff_sh_1
-
-
-                shoulder1 = ( (p[3], p[4]), (p[15], p[16]) )
-                shoulder2 = ( (p[3], p[4]), (p[6], p[7]) )
+                tmp_poses.append(p)
                 
-                dist1 = get_distance(shoulder1)
-                dist2 = get_distance(shoulder2)
+                
+                # ############################################
+                # #               Fix shoulder               #
+                # ############################################
+                # diff_neck = p[4] - sh_pos_y
+                # diff_sh_1 = p[16] - sh_pos_y
+                # diff_sh_2 = p[7] - sh_pos_y
 
-                # get new left and right factor
-                left_factor = get_new_pos(sh_len, p[3], p[4], p[16], 'left')
-                right_factor = get_new_pos(sh_len, p[3], p[4], p[7], 'right')
+                # p[4] = sh_pos_y
+                # p[7] = sh_pos_y
+                # p[16] = sh_pos_y
 
-                diff_x_left = p[15] - left_factor
-                diff_x_right = p[6] - right_factor
-
-                p[15] = left_factor
-                p[6] = right_factor
-
-                p[9] -= diff_x_right
-                p[12] -= diff_x_right
-
-                p[18] -= diff_x_left
-                p[21] -= diff_x_left
-
-                shoulder1_af = ( (p[3], p[4]), (p[15], p[16]) )
-                shoulder2_af = ( (p[3], p[4]), (p[6], p[7]) )
-
-                # dist1_af = self.get_distance(shoulder1_af)
-                # dist2_af = self.get_distance(shoulder2_af)
-
-                dist1_list.append(dist1)
-                dist2_list.append(dist2)
+                # p[1] = p[1] - diff_neck
+                # p[10] = p[10] - diff_sh_2
+                # p[13] = p[13] - diff_sh_2
+                # p[19] = p[19] - diff_sh_1
+                # p[22] = p[22] - diff_sh_1
 
                 
-                # if (p[1] < p[4]) and ((p[4]-p[1])>100) and ((p[4]-p[1])<200):
-                if (p[1] < p[4]):
-                    tmp_poses.append(p)  
+                # ############################################
+                # #           Fix shoulder length            #
+                # ############################################
+                # shoulder1 = ( (p[3], p[4]), (p[15], p[16]) )
+                # shoulder2 = ( (p[3], p[4]), (p[6], p[7]) )
+                
+                # dist1 = get_distance(shoulder1)
+                # dist2 = get_distance(shoulder2)
+
+                # # get new left and right factor
+                # left_factor = get_new_pos(sh_len, p[3], p[4], p[16], 'left')
+                # right_factor = get_new_pos(sh_len, p[3], p[4], p[7], 'right')
+
+                # diff_x_left = p[15] - left_factor
+                # diff_x_right = p[6] - right_factor
+
+                # p[15] = left_factor
+                # p[6] = right_factor
+
+                # p[9] -= diff_x_right
+                # p[12] -= diff_x_right
+
+                # p[18] -= diff_x_left
+                # p[21] -= diff_x_left
+
+                # shoulder1_af = ( (p[3], p[4]), (p[15], p[16]) )
+                # shoulder2_af = ( (p[3], p[4]), (p[6], p[7]) )
+
+                # # dist1_af = self.get_distance(shoulder1_af)
+                # # dist2_af = self.get_distance(shoulder2_af)
+
+                # dist1_list.append(dist1)
+                # dist2_list.append(dist2)
+                
+                
+                # # if (p[1] < p[4]) and ((p[4]-p[1])>100) and ((p[4]-p[1])<200):
+                # if (p[1] < p[4]):
+                #     tmp_poses.append(p)  
                 
         # sampling 10fps
         tmp_poses = tmp_poses[::sampling_rate] 
@@ -320,8 +331,16 @@ def main():
     parser.add_argument('-min_word_count', type=int, default=0)
     parser.add_argument('-pca_components', type=int, default=10)
     parser.add_argument('-emb_src', default="./data/glove.6B.300d.txt")
+    
+    parser.add_argument('-display', type=bool, default=True)
+    parser.add_argument('-display_pca', type=bool, default=True)
 
     opt = parser.parse_args()
+
+    # display pca subspace or sample pos from dataset
+    if opt.display:
+        display_sample(opt)
+        exit(-1)
 
     # get train set
     train_data = loadpickle(opt.train_src, opt.data_size)
@@ -362,6 +381,26 @@ def main():
     print('[INFO] Dumping the processed data to pickle file: {}'.format(opt.save_data))
     torch.save(data, opt.save_data)
     print('[INFO] Finish.')
+
+
+def display_sample(opt):
+    data = torch.load(opt.save_data)
+    pca = data['pca']
+    
+    if opt.display_pca:
+        m_0 = np.diag([4]*10)
+        m_1 = np.diag([2]*10)
+        m_2 = np.diag([-2]*10)
+        m_3 = np.diag([-4]*10)
+        sample = np.concatenate((m_0, m_1, m_2, m_3), axis=0)
+    else:
+        sample = data['train']['tgt'][120][:30]    
+    
+    trans_pos = pca.inverse_transform(sample)
+    trans_pos = trans_pos * -1
+
+    display_multi_poses(trans_pos)
+    plt.show()
 
 
 if __name__ == '__main__':

@@ -85,7 +85,8 @@ def train(model, training_data, validation_data, optim, device, opt):
 
         if opt.save_model:
             if opt.save_mode == 'all':
-                model_name = opt.save_model + '_tr_loss_{train_loss: 3.3f}.chkpt'.format(
+                model_name = opt.save_model + '_tr_loss_{epoch}_{train_loss: 3.3f}.chkpt'.format(
+                                                                                epoch=epoch_i,
                                                                                 train_loss=train_loss)
                 torch.save(checkpoint, model_name)
             elif opt.save_mode == 'best':
@@ -95,8 +96,9 @@ def train(model, training_data, validation_data, optim, device, opt):
                     print('\t[INFO] The checkpoint file has been updated.')
             elif opt.save_mode == 'interval':
                 if epoch_i % opt.save_interval == 0: 
-                    model_name = opt.save_model + '_train_loss_{train_loss: 3.3f}.chkpt'.format(
-                                                                                train_loss=train_loss)
+                    model_name = opt.save_model + '_tr_loss_{epoch}_{train_loss: 3.3f}.chkpt'.format(
+                                                                                    epoch=epoch_i,
+                                                                                    train_loss=train_loss)
                     torch.save(checkpoint, model_name)
 
         if log_train_file and log_valid_file:
@@ -201,10 +203,10 @@ def main():
     # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
     parser.add_argument('-epoch', type=int, default=530)
-    parser.add_argument('-batch_size', type=int, default=1)
+    parser.add_argument('-batch_size', type=int, default=265)
     parser.add_argument('-n_workers', type=int, default=0)
     parser.add_argument('-dropout', type=int, default=0.1)
-    parser.add_argument('-model', default='transformer')
+    parser.add_argument('-model', default='seq2pos')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
     parser.add_argument('-save_interval', type=int, default=20)
@@ -212,7 +214,7 @@ def main():
     parser.add_argument('-lr', type=int, default=0.0001)
     
     # seq2pos args
-    parser.add_argument('-alpha', type=int, default=0.1)
+    parser.add_argument('-alpha', type=int, default=1)
     parser.add_argument('-beta', type=int, default=1)
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)

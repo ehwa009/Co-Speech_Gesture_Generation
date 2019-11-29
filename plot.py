@@ -63,31 +63,6 @@ class Plot():
 
         return anim
 
-    
-    def display_pose(self, pose, degree=0, linewidth=5.0):
-        base = pyplot.gca().transData
-        rot = transforms.Affine2D().rotate_deg(degree)
-
-        plt.plot(pose[0:6:3], pose[1:6:3], transform=rot+base, linewidth=linewidth) #neck
-        plt.plot(pose[3:9:3], pose[4:9:3], transform=rot+base,linewidth=linewidth) #sholder 1
-        plt.plot([pose[6], pose[9]], [pose[7], pose[10]], transform=rot+base, linewidth=linewidth)
-        plt.plot([pose[12], pose[9]], [pose[13], pose[10]], transform=rot+base, linewidth=linewidth) #arm1-1
-
-        plt.plot([pose[3],pose[15]], [pose[4],pose[16]], transform=rot+base, linewidth=linewidth) #sholder 2
-        plt.plot([pose[15], pose[18]], [pose[16], pose[19]], transform=rot+base, linewidth=linewidth)
-        plt.plot([pose[21], pose[18]], [pose[22], pose[19]], transform=rot+base, linewidth=linewidth) #arm2-1
-
-    
-    def display_multi_poses(self, poses, col=10):
-        fig = plt.figure(figsize=(30, 9))
-        fig.subplots_adjust(hspace=0.4, wspace=0.5)
-        
-        row = poses.shape[0] / col
-        
-        for i in range(1, poses.shape[0]+1):
-            plt.subplot(row, col, i)
-            self.display_pose(poses[i-1], linewidth=3.0)
-
     def plot_confusion_matrix(self, y_true, y_pred, classes,
                           normalize=False,
                           title=None,
@@ -145,5 +120,29 @@ class Plot():
         writer = FFMpegWriter(fps=20, metadata=dict(artist='Me'), bitrate=1800)
         ani.save('{}'.format(name), writer=writer)
         print("{}.mp4 file saved.".format(name))
+
+
+def display_pose(pose, degree=0, linewidth=5.0):
+    base = pyplot.gca().transData
+    rot = transforms.Affine2D().rotate_deg(degree)
+
+    plt.plot(pose[0:6:3], pose[1:6:3], transform=rot+base, linewidth=linewidth) #neck
+    plt.plot(pose[3:9:3], pose[4:9:3], transform=rot+base,linewidth=linewidth) #sholder 1
+    plt.plot([pose[6], pose[9]], [pose[7], pose[10]], transform=rot+base, linewidth=linewidth)
+    plt.plot([pose[12], pose[9]], [pose[13], pose[10]], transform=rot+base, linewidth=linewidth) #arm1-1
+
+    plt.plot([pose[3],pose[15]], [pose[4],pose[16]], transform=rot+base, linewidth=linewidth) #sholder 2
+    plt.plot([pose[15], pose[18]], [pose[16], pose[19]], transform=rot+base, linewidth=linewidth)
+    plt.plot([pose[21], pose[18]], [pose[22], pose[19]], transform=rot+base, linewidth=linewidth) #arm2-1
+
+
+def display_multi_poses(poses, col=10):
+    row = poses.shape[0] / col
+    fig = plt.figure(figsize=(row, 10))
+    fig.subplots_adjust(hspace=0.4, wspace=0.5)
+    
+    for i in range(1, poses.shape[0]+1):
+        plt.subplot(row, col, i)
+        display_pose(poses[i-1], linewidth=3.0)
 
         

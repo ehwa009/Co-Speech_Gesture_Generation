@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
-import transformer.constant as Constants
+import constant as Constants
 
 from transformer.layers import EncoderLayer, DecoderLayer
 

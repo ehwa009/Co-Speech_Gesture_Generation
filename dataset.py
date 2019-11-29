@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from transformer import constant
+import constant
 
 class TedDataset(torch.utils.data.Dataset):
     
