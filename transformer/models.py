@@ -44,8 +44,9 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
 
 def get_non_pad_mask(seq):
-    assert seq.dim() == 2
+    # assert seq.dim() == 2
     return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
+
 
 def get_subsequent_mask(seq):
     sz_b, len_s = seq.size()
@@ -58,21 +59,24 @@ def get_subsequent_mask(seq):
 
 class Encoder(nn.Module):
 
-    def __init__(self, n_src_vocab, len_max_seq, d_word_vec, 
-                n_layers, n_head, d_k, d_v, d_model, d_inner, dropout=0.1):
+    def __init__(self, emb_matrix, n_src_vocab, len_max_seq, d_word_vec, 
+                n_layers, n_head, d_k, d_v, d_enc_model, d_inner, dropout=0.1):
         
         super().__init__()
 
         n_position = len_max_seq + 1
 
-        self.src_word_emb = nn.Embedding(n_src_vocab, d_word_vec, padding_idx=Constants.PAD)
+        # self.src_word_emb = nn.Embedding(n_src_vocab, d_word_vec, padding_idx=Constants.PAD)
+        emb_matrix = torch.from_numpy(emb_matrix).float()
+        self.src_word_emb = nn.Embedding.from_pretrained(emb_matrix, freeze=True)
+                
         self.position_enc = nn.Embedding.from_pretrained(
-                get_sinusoid_encoding_table(n_position, d_word_vec, padding_idx=0),
+                get_sinusoid_encoding_table(n_position, emb_matrix.shape[1], padding_idx=0),
                 freeze=True)
 
         # stack n_layers of encoder
         self.layer_stack = nn.ModuleList([
-                            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+                            EncoderLayer(d_enc_model, d_inner, n_head, d_k, d_v, dropout=dropout)
                             for _ in range(n_layers)])
 
     def forward(self, src_seq, src_pos, return_attns=False):
@@ -100,17 +104,18 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
 
-    def __init__(self, len_max_seq, d_word_vec, n_layers, n_head, 
-                    d_k, d_v, d_model, d_inner, dropout=0.1):
+    def __init__(self, len_max_seq, d_motion_vec, n_layers, n_head, 
+                    d_k, d_v, d_dec_model, d_inner, dropout=0.1):
         super().__init__()
+        
         n_position = len_max_seq + 1
 
         self.postion_enc = nn.Embedding.from_pretrained(
-                                get_sinusoid_encoding_table(n_position, d_word_vec, 
+                                get_sinusoid_encoding_table(n_position, d_motion_vec, 
                                                             padding_idx=0), freeze=True)
         
         self.layer_stack = nn.ModuleList([
-                                    DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+                                    DecoderLayer(d_dec_model, d_inner, n_head, d_k, d_v, dropout=dropout)
                                     for _ in range(n_layers)])
 
     def forward(self, tgt_seq, tgt_pos, src_seq, enc_output, return_attns=False):
@@ -146,21 +151,21 @@ class Decoder(nn.Module):
 class Transformer(nn.Module):
 
     def __init__(
-                self, 
-                n_src_vocab, len_max_seq, d_word_vec=512, d_model=512, d_inner=2048,
-                n_layers=6, n_head=8, d_k=64, d_v=64,
+                self, emb_matrix,
+                n_src_vocab, len_max_seq, d_word_vec=300, d_enc_model=300, d_dec_model=10,
+                d_motion_vec=10, d_inner=2048, n_layers=6, n_head=8, d_k=64, d_v=64,
                 dropout=0.1):
         
         super().__init__()
 
         self.encoder = Encoder(
-                        n_src_vocab=n_src_vocab, len_max_seq=len_max_seq, d_word_vec=d_word_vec, 
-                        d_model=d_model, d_inner=d_inner, n_layers=n_layers, 
+                        emb_matrix=emb_matrix, n_src_vocab=n_src_vocab, len_max_seq=len_max_seq, 
+                        d_word_vec=d_word_vec, d_enc_model=d_enc_model, d_inner=d_inner, n_layers=n_layers, 
                         n_head=n_head, d_k=d_k, d_v=d_v, dropout=dropout)
 
         self.decoder = Decoder(
-                        len_max_seq=len_max_seq, d_word_vec=d_word_vec, d_k=d_k, d_v=d_v, 
-                        n_layers=n_layers, n_head=n_head, d_model=d_model, d_inner=d_inner,
+                        len_max_seq=len_max_seq, d_motion_vec=d_motion_vec, d_k=d_k, d_v=d_v, 
+                        n_layers=n_layers, n_head=n_head, d_dec_model=d_dec_model, d_inner=d_inner,
                         dropout=dropout)
 
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):

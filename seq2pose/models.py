@@ -8,6 +8,7 @@ import random
 class EncoderRNN(nn.Module):
 
     def __init__(self, emb_matrix, input_size, hidden_size, bidirectional, n_layers=1, dropout=0.1):
+        
         super().__init__()
 
         self.input_size = input_size

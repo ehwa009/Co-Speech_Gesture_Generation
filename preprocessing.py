@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import random
 
 from tqdm import tqdm
-from plot import display_multi_poses
+from plot import display_multi_poses, display_pose
 from sklearn.decomposition import PCA
 from sklearn import preprocessing
 
@@ -40,11 +40,7 @@ def get_data(data, sampling_rate):
     x_tmp = []
     y_tmp = []
 
-    def get_distance(points):
-        p1 = points[0]
-        p2 = points[1]
 
-        return math.sqrt( ((p1[0] - p2[0]) ** 2) + ((p1[1]-p2[1]) ** 2) )
 
     def get_new_pos(length, fix_x, fix_y, var_y, sh):
         if sh == 'left':
@@ -80,76 +76,14 @@ def get_data(data, sampling_rate):
     for pair in pair_list:
         sentence = pair[0]
         poses = pair[1]
-        
         tmp_poses = []
         dist1_list = []
         dist2_list = []
-
-        sh_pos_y = 330.72
-        sh_len = 154
-        
         for p in poses:
-            # remove if there is 0 value in poses
             if not(0 in p):
+                p = np.array(p) * -1 # rotate whole pose
+                p += 1500 # make it positive number
                 tmp_poses.append(p)
-                
-                
-                # ############################################
-                # #               Fix shoulder               #
-                # ############################################
-                # diff_neck = p[4] - sh_pos_y
-                # diff_sh_1 = p[16] - sh_pos_y
-                # diff_sh_2 = p[7] - sh_pos_y
-
-                # p[4] = sh_pos_y
-                # p[7] = sh_pos_y
-                # p[16] = sh_pos_y
-
-                # p[1] = p[1] - diff_neck
-                # p[10] = p[10] - diff_sh_2
-                # p[13] = p[13] - diff_sh_2
-                # p[19] = p[19] - diff_sh_1
-                # p[22] = p[22] - diff_sh_1
-
-                
-                # ############################################
-                # #           Fix shoulder length            #
-                # ############################################
-                # shoulder1 = ( (p[3], p[4]), (p[15], p[16]) )
-                # shoulder2 = ( (p[3], p[4]), (p[6], p[7]) )
-                
-                # dist1 = get_distance(shoulder1)
-                # dist2 = get_distance(shoulder2)
-
-                # # get new left and right factor
-                # left_factor = get_new_pos(sh_len, p[3], p[4], p[16], 'left')
-                # right_factor = get_new_pos(sh_len, p[3], p[4], p[7], 'right')
-
-                # diff_x_left = p[15] - left_factor
-                # diff_x_right = p[6] - right_factor
-
-                # p[15] = left_factor
-                # p[6] = right_factor
-
-                # p[9] -= diff_x_right
-                # p[12] -= diff_x_right
-
-                # p[18] -= diff_x_left
-                # p[21] -= diff_x_left
-
-                # shoulder1_af = ( (p[3], p[4]), (p[15], p[16]) )
-                # shoulder2_af = ( (p[3], p[4]), (p[6], p[7]) )
-
-                # # dist1_af = self.get_distance(shoulder1_af)
-                # # dist2_af = self.get_distance(shoulder2_af)
-
-                # dist1_list.append(dist1)
-                # dist2_list.append(dist2)
-                
-                
-                # # if (p[1] < p[4]) and ((p[4]-p[1])>100) and ((p[4]-p[1])<200):
-                # if (p[1] < p[4]):
-                #     tmp_poses.append(p)  
                 
         # sampling 10fps
         tmp_poses = tmp_poses[::sampling_rate] 
@@ -161,8 +95,6 @@ def get_data(data, sampling_rate):
             x_train.append(sentence)
             y_train.append(tmp_poses)
 
-    dist1_list = np.array(dist1_list)
-    dist2_list = np.array(dist2_list)
     print('[INFO] dataset desc.')
     print("\tparis: {}".format(len(x_train)))
     
@@ -171,8 +103,6 @@ def get_data(data, sampling_rate):
 
     print("\tmax seq in y: {}".format(len(max(y_train, key=len))))
     print("\tmin seq in y: {}\n".format(len(min(y_train, key=len))))
-
-    # print("dist1 mean: {}, dist2 mean: {}".format(np.mean(dist1_list), np.mean(dist2_list)))
 
     return x_train, y_train
 
@@ -221,9 +151,16 @@ def convert_instance_to_idx_seq(word_insts, word2idx):
 
 
 def run_PCA_train_tgt(tgt_insts, n_components):
+    
+
+    
     tgt_insts, lengths = tgt_insts_normalize(tgt_insts)
+
+
+
     pca = PCA(n_components=n_components)
     pca_tgt = pca.fit_transform(tgt_insts)
+
  
     ori_tgt = []
     # initial index of expanded pose array
@@ -273,6 +210,21 @@ def tgt_insts_normalize(tgt_insts):
         expanded normalized motion list, 
         motion lengths list
     '''
+
+    def get_distance(points):
+        p1 = points[0]
+        p2 = points[1]
+        return math.sqrt(
+            (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+    def get_theta(points):
+        p1 = points[0]
+        p2 = points[1]
+        return math.atan2( p1[1] - p2[1], p1[0] - p2[0] )
+
+    def get_new_cor(theta, dist, point):
+        return dist * np.array([math.cos(theta), math.sin(theta)]) + np.array([point[0], point[1]])
+
     tmp = []
     length = []
     # expand poses list
@@ -285,6 +237,102 @@ def tgt_insts_normalize(tgt_insts):
     tmp = np.array(tmp)
     # normalized with specific scale
     normalized = preprocessing.normalize(tmp, norm='l2') * 50
+
+    # relocate x and y of neck coordinate
+    mean_val_pose = np.mean(normalized, axis=0)
+
+    # get mean dist of each shoulders
+    rig_sh_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
+                                    (mean_val_pose[6], mean_val_pose[7])))
+    lef_sh_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
+                                    (mean_val_pose[15], mean_val_pose[16])))
+    neck_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
+                                    (mean_val_pose[0], mean_val_pose[1])))
+    rig_arm_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
+                                    (mean_val_pose[6], mean_val_pose[7])))
+    rig_hand_len_mean = get_distance(((mean_val_pose[9], mean_val_pose[10]),
+                                    (mean_val_pose[12], mean_val_pose[13])))
+    lef_arm_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
+                                    (mean_val_pose[15], mean_val_pose[16])))
+    lef_hand_len_mean = get_distance(((mean_val_pose[18], mean_val_pose[19]),
+                                    (mean_val_pose[21], mean_val_pose[22])))
+
+    for pose in normalized:
+        # ------------------- re-coordinate neck --------------------- #
+        neck_diff_x = mean_val_pose[3] - pose[3]
+        neck_diff_y = mean_val_pose[4] - pose[4]
+        for i in range(len(pose)):
+            if i % 3 == 0: # x
+                pose[i] += neck_diff_x
+            elif i % 3 == 1: # y
+                pose[i] += neck_diff_y
+        # modify neck x and y pos
+        pose[3] = mean_val_pose[3]
+        pose[4] = mean_val_pose[4]
+        # # ------------------- normalize shoulder --------------------- #
+        # # get theta
+        # rig_angle = get_theta( ((pose[6], pose[7]),
+        #                         (pose[3], pose[4])) )
+        # lef_angle = get_theta( ((pose[15], pose[16]),
+        #                         (pose[3], pose[4])) )
+        #
+        # rig_len = get_distance( ((pose[3], pose[4]), (pose[6], pose[7])) )
+        # lef_len = get_distance( ((pose[3], pose[4]), (pose[15], pose[16])) )
+        # rig_ratio = rig_len / rig_sh_len_mean
+        # lef_ratio = lef_len / lef_sh_len_mean
+        # print('TEST')
+        #
+        # new_rig_sh_pos = get_new_cor(rig_angle, rig_sh_len_mean, pose[6:8])
+        # new_lef_sh_pos = get_new_cor(lef_angle, lef_sh_len_mean, pose[15:17])
+        #
+        # pose[6] = new_rig_sh_pos[0]  # x
+        # pose[7] = new_rig_sh_pos[1]  # y
+        # pose[15] = new_lef_sh_pos[0]  # x
+        # pose[16] = new_lef_sh_pos[1]  # y
+        #
+        # # neck length
+        # neck_len = get_distance( ((pose[3], pose[4]), (pose[0], pose[1])) ) + neck_len_mean * (1 - rig_ratio)
+        # angle = get_theta( ((pose[0], pose[1]),
+        #                     (pose[3], pose[4])) )
+        # new_neck_cor = get_new_cor(angle, neck_len, pose[0:2])
+        # pose[0] = new_neck_cor[0]
+        # pose[1] = new_neck_cor[1]
+        #
+        # # right arm
+        # arm_len = get_distance( ((pose[9], pose[10]), (pose[6], pose[7])) ) + rig_arm_len_mean * (1 - rig_ratio)
+        # angle = get_theta( ((pose[9], pose[10]),
+        #                     (pose[6], pose[7])) )
+        # new_rig_arm_cor = get_new_cor(angle, arm_len, pose[9:11])
+        # pose[9] = new_rig_arm_cor[0]
+        # pose[10] = new_rig_arm_cor[1]
+        #
+        # # right hand
+        # hand_len = get_distance(((pose[9], pose[10]), (pose[12], pose[13]))) + rig_hand_len_mean * (1 - rig_ratio)
+        # angle = get_theta(((pose[12], pose[13]),
+        #                    (pose[9], pose[10])))
+        # new_rig_hand_cor = get_new_cor(angle, hand_len, pose[12:14])
+        # pose[12] = new_rig_hand_cor[0]
+        # pose[13] = new_rig_hand_cor[1]
+        #
+        # # left arm
+        # arm_len = get_distance(((pose[15], pose[16]), (pose[18], pose[19]))) + lef_arm_len_mean * (1 - lef_ratio)
+        # angle = get_theta(((pose[18], pose[19]),
+        #                    (pose[15], pose[16])))
+        # new_lef_arm_cor = get_new_cor(angle, arm_len, pose[18:20])
+        # pose[18] = new_lef_arm_cor[0]
+        # pose[19] = new_lef_arm_cor[1]
+        #
+        # # left hand
+        # hand_len = get_distance(((pose[18], pose[19]), (pose[21], pose[22]))) + lef_hand_len_mean * (1 - lef_ratio)
+        # angle = get_theta(((pose[21], pose[22]),
+        #                    (pose[18], pose[19])))
+        # new_rig_hand_cor = get_new_cor(angle, hand_len, pose[21:23])
+        # pose[21] = new_rig_hand_cor[0]
+        # pose[22] = new_rig_hand_cor[1]
+
+        # display_pose(pose)
+        # plt.show()
+
     return normalized, length
 
 
@@ -333,7 +381,7 @@ def main():
     parser.add_argument('-emb_src', default="./data/glove.6B.300d.txt")
     
     parser.add_argument('-display', type=bool, default=True)
-    parser.add_argument('-display_pca', type=bool, default=True)
+    parser.add_argument('-display_pca', type=bool, default=False)
 
     opt = parser.parse_args()
 
@@ -386,19 +434,17 @@ def main():
 def display_sample(opt):
     data = torch.load(opt.save_data)
     pca = data['pca']
-    
     if opt.display_pca:
-        m_0 = np.diag([4]*10)
-        m_1 = np.diag([2]*10)
-        m_2 = np.diag([-2]*10)
-        m_3 = np.diag([-4]*10)
+        factor = 1.5
+        m_0 = np.diag([factor]*10)
+        m_1 = np.diag([factor / 2]*10)
+        m_2 = np.diag([factor / 2 * -1]*10)
+        m_3 = np.diag([factor * -1]*10)
         sample = np.concatenate((m_0, m_1, m_2, m_3), axis=0)
     else:
-        sample = data['train']['tgt'][120][:30]    
+        sample = data['train']['tgt'][0][:30]
     
     trans_pos = pca.inverse_transform(sample)
-    trans_pos = trans_pos * -1
-
     display_multi_poses(trans_pos)
     plt.show()
 

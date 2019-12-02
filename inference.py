@@ -85,7 +85,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_train_loss_-0.199.chkpt')
+    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_0_ 39.130.chkpt')
 
     arg = parser.parse_args()
 
@@ -107,8 +107,8 @@ def main():
                 word_emb=data['emb_tbl'], 
                 batch_size=1, 
                 hidden_size=opt.hidden_size, 
-                n_enc_layers=opt.n_layers,
-                n_dec_layers=opt.n_layers,
+                n_enc_layers=opt.n_enc_layers,
+                n_dec_layers=opt.n_dec_layers,
                 bidirectional=opt.bidirectional,
                 dropout=opt.dropout,
                 out_dim = data['pca'].n_components).to(device)

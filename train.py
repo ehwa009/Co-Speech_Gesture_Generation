@@ -1,11 +1,7 @@
 import argparse
 import torch
-import torch.optim as optim
 import time
-import numpy as np
-import matplotlib.pyplot as plt
 import torch.nn.functional as F
-import math
 
 from torch import optim
 from tqdm import tqdm
@@ -13,7 +9,6 @@ from dataset import TedDataset, collate_fn
 from functools import partial
 from transformer.models import Transformer
 from seq2pose.models import Seq2Pose
-from plot import Plot
 
 # to prevent error from num_workers option
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -95,11 +90,12 @@ def train(model, training_data, validation_data, optim, device, opt):
                     torch.save(checkpoint, model_name)
                     print('\t[INFO] The checkpoint file has been updated.')
             elif opt.save_mode == 'interval':
-                if epoch_i % opt.save_interval == 0: 
+                if (epoch_i % opt.save_interval) == 0: 
                     model_name = opt.save_model + '_tr_loss_{epoch}_{train_loss: 3.3f}.chkpt'.format(
                                                                                     epoch=epoch_i,
                                                                                     train_loss=train_loss)
                     torch.save(checkpoint, model_name)
+                    print('\t[INFO] The checkpoint file has been saved.')
 
         if log_train_file and log_valid_file:
             with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
@@ -172,49 +168,26 @@ def train_epoch(model, training_data, optim, device, opt):
         total_loss += batch_loss/n_motion
     
     return total_loss
-    
-
-def display_pca_subspace(data):
-    pca = data['pca']
-    space = 10
-    factor = -1
-
-    m_0 = np.diag([4]*space)
-    m_1 = np.diag([2]*space)
-    m_2 = np.diag([-2]*space)
-    m_3 = np.diag([-4]*space)
-    pca_motions = np.concatenate((m_0, m_1, m_2, m_3), axis=0)
-
-    trans_motions = []
-    for motion in pca_motions:
-        trans_motion = pca.inverse_transform(motion)
-        trans_motions.append(trans_motion)
-    trans_motions = np.array(trans_motions) * factor
-
-    plot = Plot((0,10), (0,10))
-    plot.display_multi_poses(trans_motions, col=pca_motions.shape[1])
-    plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-see_pca', type=bool, default=False)
-    
+
     # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
     parser.add_argument('-epoch', type=int, default=530)
     parser.add_argument('-batch_size', type=int, default=265)
     parser.add_argument('-n_workers', type=int, default=0)
     parser.add_argument('-dropout', type=int, default=0.1)
-    parser.add_argument('-model', default='seq2pos')
+    parser.add_argument('-model', default='transformer')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
-    parser.add_argument('-save_interval', type=int, default=20)
+    parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
     
     # seq2pos args
-    parser.add_argument('-alpha', type=int, default=1)
+    parser.add_argument('-alpha', type=int, default=0.1)
     parser.add_argument('-beta', type=int, default=1)
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)
@@ -228,7 +201,8 @@ def main():
 
     # transformer args
     parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-d_model', type=int, default=512)
+    parser.add_argument('-d_enc_model', type=int, default=300)
+    parser.add_argument('-d_dec_model', type=int, default=10)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)
@@ -247,38 +221,35 @@ def main():
     print(opt)
 
     ############################################
-    #            Check PCA Subspace            #
-    ############################################
-    if opt.see_pca:
-        display_pca_subspace(data)
-
-    
-    ############################################
     #               Prepare Model              #
     ############################################
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
     if opt.model == 'transformer':
         print('[INFO] transformer model selected.')
         model = Transformer(
+            emb_matrix=data['emb_tbl'],
             n_src_vocab=opt.scr_vocab_size,
             len_max_seq=8, # todo
-            d_word_vec=opt.d_model,
+            d_enc_model=opt.d_enc_model,
+            d_dec_model=opt.d_dec_model,
             d_inner=opt.d_inner_hid,
             n_layers=opt.n_layers,
             d_k=opt.d_k,
             d_v=opt.d_v,
             dropout=opt.dropout).to(device)
+    
     elif opt.model == 'seq2pos':
         print('[INFO] seq2pos model selected.')
-        model = Seq2Pose(word_emb=data['emb_tbl'], 
-                        batch_size=opt.batch_size, 
-                        hidden_size=opt.hidden_size, 
-                        n_enc_layers=opt.n_enc_layers,
-                        n_dec_layers=opt.n_dec_layers,
-                        bidirectional=opt.bidirectional,
-                        dropout=opt.dropout,
-                        out_dim = data['pca'].n_components).to(device)
+        model = Seq2Pose(
+            word_emb=data['emb_tbl'],
+            batch_size=opt.batch_size,
+            hidden_size=opt.hidden_size,
+            n_enc_layers=opt.n_enc_layers,
+            n_dec_layers=opt.n_dec_layers,
+            bidirectional=opt.bidirectional,
+            dropout=opt.dropout,
+            out_dim=data['pca'].n_components).to(device)
+
     else:
         print("[ERROR] undefined model.")
 
@@ -293,9 +264,9 @@ def main():
 def prepare_dataloaders(data, opt):
     train_loader = torch.utils.data.DataLoader(
         TedDataset(
-                src_word2idx=data['dict'],
-                src_insts=data['train']['src'],
-                tgt_insts=data['train']['tgt']
+            src_word2idx=data['dict'],
+            src_insts=data['train']['src'],
+            tgt_insts=data['train']['tgt']
             ),
             num_workers=opt.n_workers,
             batch_size=opt.batch_size,
@@ -304,9 +275,9 @@ def prepare_dataloaders(data, opt):
 
     valid_loader = torch.utils.data.DataLoader(
         TedDataset(
-                src_word2idx=data['dict'],
-                src_insts=data['valid']['src'],
-                tgt_insts=data['valid']['tgt']
+            src_word2idx=data['dict'],
+            src_insts=data['valid']['src'],
+            tgt_insts=data['valid']['tgt']
             ),
             num_workers=opt.n_workers,
             batch_size=opt.batch_size,
