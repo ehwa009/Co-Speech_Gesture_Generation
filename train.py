@@ -2,6 +2,7 @@ import argparse
 import torch
 import time
 import torch.nn.functional as F
+import os
 
 from torch import optim
 from tqdm import tqdm
@@ -12,8 +13,6 @@ from seq2pose.models import Seq2Pose
 
 # to prevent error from num_workers option
 torch.multiprocessing.set_sharing_strategy('file_system')
-torch.backends.cudnn.benchmark = True
-
 
 def cust_loss(output, target, alpha, beta):
     n_element = output.numel()
@@ -46,13 +45,13 @@ def train(model, training_data, validation_data, optim, device, opt, start_i=0):
     if opt.log:
         log_train_file = opt.log + '{}_train.log'.format(opt.model)
         log_valid_file = opt.log + '{}_valid.log'.format(opt.model)
-
         print('[INFO] Training performance will be written to file: {} and {}'.format(
                                                             log_train_file, log_valid_file))
 
-        with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
-            log_tf.write('epoch,loss\n')
-            log_vf.write('epoch,loss\n')
+        if not(os.path.exists(log_train_file) and os.path.exists(log_valid_file)):
+            with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
+                log_tf.write('epoch,loss\n')
+                log_vf.write('epoch,loss\n')
 
     valid_loss_list = []
     for epoch_i in range(start_i, opt.epoch):
@@ -116,18 +115,15 @@ def eval_epoch(model, validation_data, device, opt):
             for src_seq, src_len, src_pos, tgt_seq, tgt_pos in batch:
                 src_seq = src_seq.to(device)
                 tgt_seq = tgt_seq.to(device)
-                
                 # predict
                 if opt.model == "transformer": # todo
                     pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
                 elif opt.model == 'seq2pos':
                     pred, ans = model(opt, src_seq, src_len, tgt_seq, device)
                     loss = cust_loss(pred, ans, opt.alpha, opt.beta)
-
                     # note keeping
                     batch_loss += loss.item()
                     n_motion += 1
-            
             total_loss += batch_loss/n_motion
         
         return total_loss
@@ -143,13 +139,11 @@ def train_epoch(model, training_data, optim, device, opt):
         for src_seq, src_len, src_pos, tgt_seq, tgt_pos in batch:
             # make gradient zero
             optim.zero_grad()
-            
             # processed dataset
             src_seq = src_seq.to(device)
             tgt_seq = tgt_seq.to(device)
             src_pos = src_pos.to(device)
             tgt_pos = tgt_pos.to(device)
-            
             # predict
             if opt.model == "transformer": # todo
                 pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
@@ -160,11 +154,10 @@ def train_epoch(model, training_data, optim, device, opt):
 
             # optimize
             optim.step()
-
             # note keeping
             batch_loss += loss.item()
             n_motion += 1
-        
+
         total_loss += batch_loss/n_motion
     
     return total_loss
@@ -185,7 +178,7 @@ def main():
     parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
-    parser.add_argument('-chkpt', default='_tr_loss_150_-1.266.chkpt')
+    parser.add_argument('-chkpt', default='./trained_model/seq2pos_tr_loss_150_-1.266.chkpt')
     
     # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
@@ -223,12 +216,11 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if opt.chkpt:
-        trained_path = opt.save_model + opt.chkpt
-        model_info = torch.load(trained_path)
+        print('[INFO] continue train from checkpoint from:{}'.format(opt.chkpt))
+        model_info = torch.load(opt.chkpt)
         state = model_info['model']
         opt = model_info['settings']
         start_i = model_info['epoch']
-        print('[INFO] continue train from checkpoint from:{}'.format(trained_path))
 
         ############################################
         #               Prepare Model              #
@@ -297,9 +289,9 @@ def main():
         else:
             print("[ERROR] undefined model.")
 
-    # optimizer
-    optimizer = optim.Adam(model.parameters(), lr=opt.lr)
-    train(model, training_data, validation_data, optimizer, device, opt)
+        # optimizer
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+        train(model, training_data, validation_data, optimizer, device, opt)
 
     ############################################
     #            Prepare Dataloader            #

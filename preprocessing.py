@@ -220,13 +220,15 @@ def tgt_insts_normalize(tgt_insts):
     def get_new_cor(theta, dist, point):
         return dist * np.array([math.cos(theta), math.sin(theta)]) + np.array([point[0], point[1]])
 
-    def length_norm(var_x, var_y, fix_x, fix_y, mean_len):
+    def length_norm(var_x, var_y, fix_x, fix_y, expanded_len):
         angle = get_theta(var_x, var_y, fix_x, fix_y)
-        new_cor = get_new_cor(angle,
-                    get_distance(var_x, var_y, fix_x, fix_y),
-                    [var_x, var_y])
+        new_cor = get_new_cor(
+                        angle,
+                        expanded_len,
+                        [var_x, var_y])
+        ratio = expanded_len / get_distance(var_x, var_y, fix_x, fix_y)
 
-        return new_cor
+        return new_cor, ratio
 
 
     tmp = []
@@ -246,96 +248,76 @@ def tgt_insts_normalize(tgt_insts):
     mean_val_pose = np.mean(normalized, axis=0)
 
     # get mean dist of each shoulders
-    rig_sh_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
-                                    (mean_val_pose[6], mean_val_pose[7])))
-    lef_sh_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
-                                    (mean_val_pose[15], mean_val_pose[16])))
-    neck_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
-                                    (mean_val_pose[0], mean_val_pose[1])))
-    rig_arm_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
-                                    (mean_val_pose[6], mean_val_pose[7])))
-    rig_hand_len_mean = get_distance(((mean_val_pose[9], mean_val_pose[10]),
-                                    (mean_val_pose[12], mean_val_pose[13])))
-    lef_arm_len_mean = get_distance(((mean_val_pose[3], mean_val_pose[4]),
-                                    (mean_val_pose[15], mean_val_pose[16])))
-    lef_hand_len_mean = get_distance(((mean_val_pose[18], mean_val_pose[19]),
-                                    (mean_val_pose[21], mean_val_pose[22])))
+    rig_sh_len_mean = get_distance(mean_val_pose[3], mean_val_pose[4], mean_val_pose[6], mean_val_pose[7])
+    lef_sh_len_mean = get_distance(mean_val_pose[3], mean_val_pose[4], mean_val_pose[15], mean_val_pose[16])
+
 
     for pose in normalized:
         # ------------------- re-coordinate neck --------------------- #
-        neck_diff_x = mean_val_pose[3] - pose[3]
-        neck_diff_y = mean_val_pose[4] - pose[4]
+        # neck_diff_x = mean_val_pose[3] - pose[3]
+        # neck_diff_y = mean_val_pose[4] - pose[4]
+        neck_diff_x = 0 - pose[3]
+        neck_diff_y = 0 - pose[4]
         for i in range(len(pose)):
             if i % 3 == 0: # x
                 pose[i] += neck_diff_x
             elif i % 3 == 1: # y
                 pose[i] += neck_diff_y
         # modify neck x and y pos
-        pose[3] = mean_val_pose[3]
-        pose[4] = mean_val_pose[4]
-        # # ------------------- normalize shoulder --------------------- #
-        # # get theta
-        # rig_angle = get_theta( ((pose[6], pose[7]),
-        #                         (pose[3], pose[4])) )
-        # lef_angle = get_theta( ((pose[15], pose[16]),
-        #                         (pose[3], pose[4])) )
-        #
-        # rig_len = get_distance( ((pose[3], pose[4]), (pose[6], pose[7])) )
-        # lef_len = get_distance( ((pose[3], pose[4]), (pose[15], pose[16])) )
-        # rig_ratio = rig_len / rig_sh_len_mean
-        # lef_ratio = lef_len / lef_sh_len_mean
-        # print('TEST')
-        #
-        # new_rig_sh_pos = get_new_cor(rig_angle, rig_sh_len_mean, pose[6:8])
-        # new_lef_sh_pos = get_new_cor(lef_angle, lef_sh_len_mean, pose[15:17])
-        #
-        # pose[6] = new_rig_sh_pos[0]  # x
-        # pose[7] = new_rig_sh_pos[1]  # y
-        # pose[15] = new_lef_sh_pos[0]  # x
-        # pose[16] = new_lef_sh_pos[1]  # y
-        #
-        # # neck length
-        # neck_len = get_distance( ((pose[3], pose[4]), (pose[0], pose[1])) ) + neck_len_mean * (1 - rig_ratio)
-        # angle = get_theta( ((pose[0], pose[1]),
-        #                     (pose[3], pose[4])) )
-        # new_neck_cor = get_new_cor(angle, neck_len, pose[0:2])
-        # pose[0] = new_neck_cor[0]
-        # pose[1] = new_neck_cor[1]
-        #
-        # # right arm
-        # arm_len = get_distance( ((pose[9], pose[10]), (pose[6], pose[7])) ) + rig_arm_len_mean * (1 - rig_ratio)
-        # angle = get_theta( ((pose[9], pose[10]),
-        #                     (pose[6], pose[7])) )
-        # new_rig_arm_cor = get_new_cor(angle, arm_len, pose[9:11])
-        # pose[9] = new_rig_arm_cor[0]
-        # pose[10] = new_rig_arm_cor[1]
-        #
+        # pose[3] = mean_val_pose[3]
+        # pose[4] = mean_val_pose[4]
+        pose[3] = 0
+        pose[4] = 0
+
+        # ------------------- normalize shoulder --------------------- #
+        rig_new_cor, rig_ratio = length_norm(pose[6], pose[7], pose[3], pose[4], rig_sh_len_mean)
+        lef_new_cor, lef_ratio = length_norm(pose[15], pose[16], pose[3], pose[4], lef_sh_len_mean)
+
+        rig_diff_x = rig_new_cor[0] - pose[6]
+        rig_diff_y = rig_new_cor[1] - pose[7]
+        lef_diff_x = lef_new_cor[0] - pose[15]
+        lef_diff_y = lef_new_cor[1] - pose[16]
+
+        pose[6] = rig_new_cor[0]
+        pose[7] = rig_new_cor[1]
+        pose[15] = lef_new_cor[0]
+        pose[16] = lef_new_cor[1]
+
+        # neck
+        neck_new_cor, _ = length_norm(pose[0], pose[1], pose[3], pose[4],
+                               get_distance(pose[0], pose[1], pose[3], pose[4]) * rig_ratio)
+        pose[0] = neck_new_cor[0] + rig_diff_x
+        pose[1] = neck_new_cor[1] + rig_diff_y
+        # right arm
+        rig_arm_new_cor, _ = length_norm(pose[9], pose[10], pose[6], pose[7],
+                               get_distance(pose[9], pose[10], pose[6], pose[7]) * rig_ratio)
+        pose[9] = rig_arm_new_cor[0]
+        pose[10] = rig_arm_new_cor[1]
+        pose[9] += rig_diff_x
+        pose[10] += rig_diff_y
         # # right hand
-        # hand_len = get_distance(((pose[9], pose[10]), (pose[12], pose[13]))) + rig_hand_len_mean * (1 - rig_ratio)
-        # angle = get_theta(((pose[12], pose[13]),
-        #                    (pose[9], pose[10])))
-        # new_rig_hand_cor = get_new_cor(angle, hand_len, pose[12:14])
-        # pose[12] = new_rig_hand_cor[0]
-        # pose[13] = new_rig_hand_cor[1]
+        rig_hand_new_cor, _ = length_norm(pose[12], pose[13], pose[9], pose[10],
+                                         get_distance(pose[12], pose[13], pose[9], pose[10]) * rig_ratio)
+        pose[12] = rig_hand_new_cor[0]
+        pose[13] = rig_hand_new_cor[1]
+        pose[12] += rig_diff_x
+        pose[13] += rig_diff_y
         #
         # # left arm
-        # arm_len = get_distance(((pose[15], pose[16]), (pose[18], pose[19]))) + lef_arm_len_mean * (1 - lef_ratio)
-        # angle = get_theta(((pose[18], pose[19]),
-        #                    (pose[15], pose[16])))
-        # new_lef_arm_cor = get_new_cor(angle, arm_len, pose[18:20])
-        # pose[18] = new_lef_arm_cor[0]
-        # pose[19] = new_lef_arm_cor[1]
-        #
+        lef_arm_new_cor, _ = length_norm(pose[18], pose[19], pose[15], pose[16],
+                                         get_distance(pose[18], pose[19], pose[15], pose[16]) * lef_ratio)
+        pose[18] = lef_arm_new_cor[0]
+        pose[19] = lef_arm_new_cor[1]
+        pose[18] += lef_diff_x
+        pose[19] += lef_diff_y
         # # left hand
-        # hand_len = get_distance(((pose[18], pose[19]), (pose[21], pose[22]))) + lef_hand_len_mean * (1 - lef_ratio)
-        # angle = get_theta(((pose[21], pose[22]),
-        #                    (pose[18], pose[19])))
-        # new_rig_hand_cor = get_new_cor(angle, hand_len, pose[21:23])
-        # pose[21] = new_rig_hand_cor[0]
-        # pose[22] = new_rig_hand_cor[1]
+        lef_hand_new_cor, _ = length_norm(pose[21], pose[22], pose[18], pose[19],
+                                         get_distance(pose[21], pose[22], pose[18], pose[19]) * lef_ratio)
+        pose[21] += lef_diff_x
+        pose[22] += lef_diff_y
 
-        # display_pose(pose)
-        # plt.show()
+        display_pose(pose)
+        plt.show()
 
     return normalized, length
 
@@ -384,7 +366,7 @@ def main():
     parser.add_argument('-pca_components', type=int, default=10)
     parser.add_argument('-emb_src', default="./data/glove.6B.300d.txt")
     
-    parser.add_argument('-display', type=bool, default=True)
+    parser.add_argument('-display', type=bool, default=False)
     parser.add_argument('-display_pca', type=bool, default=False)
 
     opt = parser.parse_args()
