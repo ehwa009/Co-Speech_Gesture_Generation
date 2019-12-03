@@ -37,7 +37,7 @@ def cust_loss(output, target, alpha, beta):
     return loss
 
 
-def train(model, training_data, validation_data, optim, device, opt):
+def train(model, training_data, validation_data, optim, device, opt, start_i=0):
     ''' Start traning '''
 
     log_train_file = None
@@ -55,7 +55,7 @@ def train(model, training_data, validation_data, optim, device, opt):
             log_vf.write('epoch,loss\n')
 
     valid_loss_list = []
-    for epoch_i in range(opt.epoch):
+    for epoch_i in range(start_i, opt.epoch):
         print('[ Epoch: {} ]'.format(epoch_i))
 
         start = time.time()
@@ -176,22 +176,23 @@ def main():
     # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
     parser.add_argument('-epoch', type=int, default=530)
-    parser.add_argument('-batch_size', type=int, default=265)
+    parser.add_argument('-batch_size', type=int, default=256)
     parser.add_argument('-n_workers', type=int, default=0)
     parser.add_argument('-dropout', type=int, default=0.1)
-    parser.add_argument('-model', default='transformer')
+    parser.add_argument('-model', default='seq2pos')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
     parser.add_argument('-save_mode', default='interval')
     parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
+    parser.add_argument('-chkpt', default='_tr_loss_150_-1.266.chkpt')
     
     # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
     parser.add_argument('-beta', type=int, default=1)
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)
-    parser.add_argument('-tf_ratio', type=int, default=0.5)
+    parser.add_argument('-tf_ratio', type=int, default=0.4)
     parser.add_argument('-n_enc_layers', type=int, default=2)
     parser.add_argument('-n_dec_layers', type=int, default=1)
     parser.add_argument('-pre_motions', type=int, default=10)
@@ -217,46 +218,88 @@ def main():
 
     training_data, validation_data = prepare_dataloaders(data, opt)
     opt.scr_vocab_size = training_data.dataset.scr_vocab_size
-
     print(opt)
 
-    ############################################
-    #               Prepare Model              #
-    ############################################
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if opt.model == 'transformer':
-        print('[INFO] transformer model selected.')
-        model = Transformer(
-            emb_matrix=data['emb_tbl'],
-            n_src_vocab=opt.scr_vocab_size,
-            len_max_seq=8, # todo
-            d_enc_model=opt.d_enc_model,
-            d_dec_model=opt.d_dec_model,
-            d_inner=opt.d_inner_hid,
-            n_layers=opt.n_layers,
-            d_k=opt.d_k,
-            d_v=opt.d_v,
-            dropout=opt.dropout).to(device)
-    
-    elif opt.model == 'seq2pos':
-        print('[INFO] seq2pos model selected.')
-        model = Seq2Pose(
-            word_emb=data['emb_tbl'],
-            batch_size=opt.batch_size,
-            hidden_size=opt.hidden_size,
-            n_enc_layers=opt.n_enc_layers,
-            n_dec_layers=opt.n_dec_layers,
-            bidirectional=opt.bidirectional,
-            dropout=opt.dropout,
-            out_dim=data['pca'].n_components).to(device)
+
+    if opt.chkpt:
+        trained_path = opt.save_model + opt.chkpt
+        model_info = torch.load(trained_path)
+        state = model_info['model']
+        opt = model_info['settings']
+        start_i = model_info['epoch']
+        print('[INFO] continue train from checkpoint from:{}'.format(trained_path))
+
+        ############################################
+        #               Prepare Model              #
+        ############################################
+        if opt.model == 'transformer':
+            print('[INFO] transformer model selected.')
+            model = Transformer(
+                emb_matrix=data['emb_tbl'],
+                n_src_vocab=opt.scr_vocab_size,
+                len_max_seq=8, # todo
+                d_enc_model=opt.d_enc_model,
+                d_dec_model=opt.d_dec_model,
+                d_inner=opt.d_inner_hid,
+                n_layers=opt.n_layers,
+                d_k=opt.d_k,
+                d_v=opt.d_v,
+                dropout=opt.dropout).to(device)
+        elif opt.model == 'seq2pos':
+            print('[INFO] seq2pos model selected.')
+            model = Seq2Pose(
+                word_emb=data['emb_tbl'],
+                batch_size=opt.batch_size,
+                hidden_size=opt.hidden_size,
+                n_enc_layers=opt.n_enc_layers,
+                n_dec_layers=opt.n_dec_layers,
+                bidirectional=opt.bidirectional,
+                dropout=opt.dropout,
+                out_dim=data['pca'].n_components).to(device)
+        else:
+            print("[ERROR] undefined model.")
+        print('[INFO] load state dict')
+        model.load_state_dict(state)
+
+        # optimizer
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+        train(model, training_data, validation_data, optimizer, device, opt, start_i=start_i+1)
 
     else:
-        print("[ERROR] undefined model.")
+        ############################################
+        #               Prepare Model              #
+        ############################################
+        if opt.model == 'transformer':
+            print('[INFO] transformer model selected.')
+            model = Transformer(
+                emb_matrix=data['emb_tbl'],
+                n_src_vocab=opt.scr_vocab_size,
+                len_max_seq=8, # todo
+                d_enc_model=opt.d_enc_model,
+                d_dec_model=opt.d_dec_model,
+                d_inner=opt.d_inner_hid,
+                n_layers=opt.n_layers,
+                d_k=opt.d_k,
+                d_v=opt.d_v,
+                dropout=opt.dropout).to(device)
+        elif opt.model == 'seq2pos':
+            print('[INFO] seq2pos model selected.')
+            model = Seq2Pose(
+                word_emb=data['emb_tbl'],
+                batch_size=opt.batch_size,
+                hidden_size=opt.hidden_size,
+                n_enc_layers=opt.n_enc_layers,
+                n_dec_layers=opt.n_dec_layers,
+                bidirectional=opt.bidirectional,
+                dropout=opt.dropout,
+                out_dim=data['pca'].n_components).to(device)
+        else:
+            print("[ERROR] undefined model.")
 
     # optimizer
     optimizer = optim.Adam(model.parameters(), lr=opt.lr)
     train(model, training_data, validation_data, optimizer, device, opt)
-
 
     ############################################
     #            Prepare Dataloader            #

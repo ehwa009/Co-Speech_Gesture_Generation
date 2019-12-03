@@ -4,3 +4,4 @@ processed_data/*.*
 trained_model/*.*
 __pycache__
 .vscode
+.idea

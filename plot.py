@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
 
 from matplotlib import pyplot, transforms
 from matplotlib import animation, rc
@@ -7,6 +8,7 @@ from matplotlib import animation, rc
 from matplotlib.animation import FFMpegWriter
 from sklearn.metrics import confusion_matrix
 from sklearn.utils.multiclass import unique_labels
+from LossAccPlotter.laplotter import LossAccPlotter
 
 class Plot():
 
@@ -14,19 +16,16 @@ class Plot():
         """Instantiates an object to visualize the generated poses."""
         self.fig = plt.figure()
         ax = plt.axes(xlim=x_lim, ylim=y_lim)
-
-        base = pyplot.gca().transData
-        rot = transforms.Affine2D().rotate_deg(180)
         
-        [self.line] = ax.plot([], [], lw=5, transform=rot+base)
+        [self.line] = ax.plot([], [], lw=5)
         
-        [self.line2] = ax.plot([], [], lw=5, transform=rot+base)
-        [self.line3] = ax.plot([], [], lw=5, transform=rot+base)
-        [self.line4] = ax.plot([], [], lw=5, transform=rot+base)
+        [self.line2] = ax.plot([], [], lw=5)
+        [self.line3] = ax.plot([], [], lw=5)
+        [self.line4] = ax.plot([], [], lw=5)
 
-        [self.line5] = ax.plot([], [], lw=5, transform=rot+base)
-        [self.line6] = ax.plot([], [], lw=5, transform=rot+base)
-        [self.line7] = ax.plot([], [], lw=5, transform=rot+base)
+        [self.line5] = ax.plot([], [], lw=5)
+        [self.line6] = ax.plot([], [], lw=5)
+        [self.line7] = ax.plot([], [], lw=5)
 
     def init_line(self):
         """Creates line objects which are drawn later."""
@@ -145,4 +144,44 @@ def display_multi_poses(poses, col=10):
         plt.subplot(row, col, i)
         display_pose(poses[i-1], linewidth=3.0)
 
-        
+
+def display_loss(log_train_file, log_vaild_file):
+    loss_tr = []
+    loss_vf = []
+    with open(log_train_file, 'r') as log_tf, open(log_vaild_file, 'r') as log_vf:
+        for l in log_tf:
+            line = l.rstrip()
+            line = line.split(',')
+            val = line[1].strip()
+            try:
+                loss_tr.append(float(line[1].strip()))
+            except ValueError:
+                pass
+        for l in log_vf:
+            line = l.rstrip()
+            line = line.split(',')
+            val = line[1].strip()
+            try:
+                loss_vf.append(float(line[1].strip()))
+            except ValueError:
+                pass
+
+    plt.plot(loss_tr, '-r', label='train')
+    plt.plot(loss_vf, '-b', label='validation')
+    plt.legend()
+    plt.xlabel('epoch')
+    plt.ylabel('loss')
+    plt.title('train vs. val loss')
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-model', default='seq2pos')
+    parser.add_argument('-log', default='./log/')
+    opt = parser.parse_args()
+
+    display_loss(opt.log+opt.model+'_train.log', opt.log+opt.model+'_valid.log')
+    plt.savefig(opt.log+'loss.png')
+
+
+if __name__=='__main__':
+    main()

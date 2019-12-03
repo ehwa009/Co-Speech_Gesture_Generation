@@ -85,7 +85,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_0_ 39.130.chkpt')
+    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_150_-1.266.chkpt')
 
     arg = parser.parse_args()
 
@@ -97,7 +97,6 @@ def main():
     ############################################
     state = model_info['model']
     opt = model_info['settings']
-    epoch = model_info['epoch']
 
     if opt.model == 'transformer':
         print('[INFO] Transformer model selected.')
@@ -199,7 +198,7 @@ def main():
             start += 1
     
     # plot class
-    p = Plot((-22, -7), (-15, 0))
+    p = Plot((3, 10), (6, 13))
     # p = Plot((-20, -7), (-20, 10))
     anim = p.animate(poses, 100)
     # anim.save("./figures/{}.mp4".format(sentence[:30]))

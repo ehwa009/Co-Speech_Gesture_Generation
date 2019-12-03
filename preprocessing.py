@@ -211,19 +211,23 @@ def tgt_insts_normalize(tgt_insts):
         motion lengths list
     '''
 
-    def get_distance(points):
-        p1 = points[0]
-        p2 = points[1]
-        return math.sqrt(
-            (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+    def get_distance(x1, y1, x2, y2):
+        return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
-    def get_theta(points):
-        p1 = points[0]
-        p2 = points[1]
-        return math.atan2( p1[1] - p2[1], p1[0] - p2[0] )
+    def get_theta(var_x, var_y, fix_x, fix_y):
+        return math.atan2(var_y - fix_y, var_x - fix_x)
 
     def get_new_cor(theta, dist, point):
         return dist * np.array([math.cos(theta), math.sin(theta)]) + np.array([point[0], point[1]])
+
+    def length_norm(var_x, var_y, fix_x, fix_y, mean_len):
+        angle = get_theta(var_x, var_y, fix_x, fix_y)
+        new_cor = get_new_cor(angle,
+                    get_distance(var_x, var_y, fix_x, fix_y),
+                    [var_x, var_y])
+
+        return new_cor
+
 
     tmp = []
     length = []
