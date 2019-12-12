@@ -85,7 +85,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_160_-1.322.chkpt')
+    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_180_-1.367.chkpt')
 
     arg = parser.parse_args()
 
@@ -169,10 +169,10 @@ def main():
 
 
     # inference
-    sentence = "look at the big world in front of you ,"
+    # sentence = "look at the big world in front of you ,"
     # sentence = "look at the small world in front of me ,"
     # sentence = "but what you hold in your hand leaves a bloody trail"
-    # sentence = "and the most staggering thing of all of this, to me"
+    sentence = "and the most staggering thing of all of this, to me"
     # sentence = '''One of the examples provided on the matplotlib example page is an animation of a double pendulum. 
     # #             This example operates by precomputing the pendulum position over 10 seconds, and then animating the results. 
     # #             I saw this and wondered if python would be fast enough to compute the dynamics on the fly. 
@@ -201,9 +201,9 @@ def main():
     p = Plot((3, 10), (6, 13))
     # p = Plot((-20, -7), (-20, 10))
     anim = p.animate(poses, 100)
-    anim.save("./figures/{}.mp4".format(sentence[:30]))
+    # anim.save("./figures/{}.mp4".format(sentence[:30]))
     # p.display_multi_poses(poses)
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':

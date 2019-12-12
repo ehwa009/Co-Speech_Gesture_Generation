@@ -83,7 +83,7 @@ def display_pose(pose, degree=0, linewidth=5.0):
 
 def display_multi_poses(poses, col=10):
     row = poses.shape[0] / col
-    fig = plt.figure(figsize=(row, 10))
+    fig = plt.figure(figsize=(row, col))
     fig.subplots_adjust(hspace=0.4, wspace=0.5)
     
     for i in range(1, poses.shape[0]+1):

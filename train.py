@@ -178,7 +178,7 @@ def main():
     parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
-    parser.add_argument('-chkpt', default='./trained_model/seq2pos_tr_loss_150_-1.266.chkpt')
+    parser.add_argument('-chkpt', default=False)
     
     # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
