@@ -25,7 +25,7 @@ def inference(encoder, decoder, input_words, pre_motion_seq, opt, data):
     input_length = [len(input_words) + 2]
     input_seq = np.zeros((input_length[0], 1)) # seq x batch
     # add EOS
-    input_seq[0, 0] = Constant.EOS
+    input_seq[0, 0] = Constant.BOS
     
     for i, word in enumerate(input_words):
         try:
@@ -85,18 +85,39 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_180_-1.367.chkpt')
+    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_530_-1.191.chkpt')
+    parser.add_argument('-ground_truth', type=bool, default=True)
 
     arg = parser.parse_args()
 
     data = torch.load(arg.data)
     model_info = torch.load(arg.checkpoint)
 
+    if arg.ground_truth:
+        index = 10
+        sample_src = data['train']['src'][index]
+        sample_tgt = data['train']['tgt'][index]
+        poses = np.zeros((len(sample_tgt), 24)) # to store the outputs
+        print('sample words: \n\t{}'.format(sample_src))
+        
+        start = 0
+        for pose in sample_tgt:
+            poses[start] = data['pca'].inverse_transform(pose)
+            start += 1
+        p = Plot((-7, 7), (-7, 7))
+        anim = p.animate(poses, 80)
+        # anim.save("./figures/{}.mp4".format(sentence[:30]))
+        plt.show()
+        
+        exit(-1)
+
+
     ############################################
     #               Prepare Model              #
     ############################################
     state = model_info['model']
     opt = model_info['settings']
+    # opt.pre_motions = 5
 
     if opt.model == 'transformer':
         print('[INFO] Transformer model selected.')
@@ -139,7 +160,7 @@ def main():
         num_words_for_pre_motion = round(len(words) * pre_duration / sp_duration)
         num_words_for_estimation = round(len(words) * motion_duration / sp_duration)
 
-        padded_words = ['<UNK>'] * num_words_for_pre_motion + words
+        padded_words = [Constant.UNK_WORD] * num_words_for_pre_motion + words
 
         # output tuple to save all related information
         output_tuple = namedtuple('InferenceOutput', ['words', 'pre_motion_seq', 'out_motion', 'attention'])
@@ -169,10 +190,10 @@ def main():
 
 
     # inference
-    # sentence = "look at the big world in front of you ,"
+    sentence = "look at the big world in front of you ,"
     # sentence = "look at the small world in front of me ,"
     # sentence = "but what you hold in your hand leaves a bloody trail"
-    sentence = "and the most staggering thing of all of this, to me"
+    # sentence = "and the most staggering thing of all of this, to me"
     # sentence = '''One of the examples provided on the matplotlib example page is an animation of a double pendulum. 
     # #             This example operates by precomputing the pendulum position over 10 seconds, and then animating the results. 
     # #             I saw this and wondered if python would be fast enough to compute the dynamics on the fly. 
@@ -193,16 +214,13 @@ def main():
         out_m = np.array(out.out_motion)
         out_m = out_m * offset
         for pose in out_m:
-            pose[2] = 0. # force to delete in-rotation motions
             poses[start] = data['pca'].inverse_transform(pose)
             start += 1
     
     # plot class
-    p = Plot((3, 10), (6, 13))
-    # p = Plot((-20, -7), (-20, 10))
+    p = Plot((-7, 7), (-7, 7))
     anim = p.animate(poses, 100)
     # anim.save("./figures/{}.mp4".format(sentence[:30]))
-    # p.display_multi_poses(poses)
     plt.show()
 
 

@@ -11,6 +11,8 @@ from functools import partial
 from transformer.models import Transformer
 from seq2pose.models import Seq2Pose
 
+# from torch2trt import torch2trt
+
 # to prevent error from num_workers option
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -19,10 +21,12 @@ def cust_loss(output, target, alpha, beta):
     
     # mse
     mse_loss = F.mse_loss(output, target)
-    
-    # countinous motion
-    diff = [abs(output[:, n, :] - output[:, n-1, :]) for n in range(1, output.shape[1])]
-    cont_loss = torch.sum(torch.stack(diff)) / n_element
+    try:
+        # countinous motion
+        diff = [abs(output[:, n, :] - output[:, n-1, :]) for n in range(1, output.shape[1])]
+        cont_loss = torch.sum(torch.stack(diff)) / n_element
+    except RuntimeError:
+        print('TEST')
     cont_loss /= 100
 
     # motion variance
@@ -89,7 +93,7 @@ def train(model, training_data, validation_data, optim, device, opt, start_i=0):
                     torch.save(checkpoint, model_name)
                     print('\t[INFO] The checkpoint file has been updated.')
             elif opt.save_mode == 'interval':
-                if (epoch_i % opt.save_interval) == 0: 
+                if (epoch_i % opt.save_interval) == 0 and epoch_i != 0: 
                     model_name = opt.save_model + '_tr_loss_{epoch}_{train_loss: 3.3f}.chkpt'.format(
                                                                                     epoch=epoch_i,
                                                                                     train_loss=train_loss)
@@ -168,9 +172,9 @@ def main():
 
     # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-epoch', type=int, default=530)
+    parser.add_argument('-epoch', type=int, default=531)
     parser.add_argument('-batch_size', type=int, default=256)
-    parser.add_argument('-n_workers', type=int, default=0)
+    parser.add_argument('-n_workers', type=int, default=6)
     parser.add_argument('-dropout', type=int, default=0.1)
     parser.add_argument('-model', default='seq2pos')
     parser.add_argument('-save_model', default='./trained_model/seq2pos')
@@ -178,7 +182,7 @@ def main():
     parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
-    parser.add_argument('-chkpt', default=False)
+    parser.add_argument('-chkpt', default='./trained_model/seq2pos_tr_loss_530_-1.191.chkpt')
     
     # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
@@ -220,6 +224,7 @@ def main():
         model_info = torch.load(opt.chkpt)
         state = model_info['model']
         opt = model_info['settings']
+        opt.epoch = 541
         start_i = model_info['epoch']
 
         ############################################

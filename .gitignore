@@ -6,5 +6,5 @@ __pycache__
 .vscode
 .idea
 .xml
-figures/*.*
 .ipynb_checkpoints
+torch2trt

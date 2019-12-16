@@ -153,8 +153,8 @@ def run_PCA_train_tgt(tgt_insts, lengths, n_components):
         # create empty array to store pca poses
         pca_skel = np.zeros((1, n_components))
         sel_p = pca_tgt[start:start+l]
-        # for i in range(sel_p.shape[0]):
-        #     sel_p[i][2] = 0.00
+        for i in range(sel_p.shape[0]):
+            sel_p[i][2] = 0.00
         # stack
         ori_tgt.append(sel_p)
         # change index
@@ -172,8 +172,8 @@ def run_PCA_val_tgt(pca, tgt_insts, lengths, n_components):
         # create empty array to store pca poses
         pca_skel = np.zeros((1, n_components))
         sel_p = pca_tgt[start:start+l]
-        # for i in range(sel_p.shape[0]):
-        #     sel_p[i][2] = 0.00
+        for i in range(sel_p.shape[0]):
+            sel_p[i][2] = 0.00
         # stack
         ori_tgt.append(sel_p)
         # change index
@@ -215,24 +215,27 @@ def tgt_insts_normalize(tgt_insts):
         # print("new cor: {:0.2f}, {:0.2f}".format(new_cor[0], new_cor[1]))
         return new_cor, ratio
 
+    # ------------------- Fitering poses --------------------- #
     tmp = []
     length = []
     # expand poses list
     for pose in tgt_insts:
         p_count = 0
         for p in pose:
-            # if abs(p[16] - p[7]) < 5: # we don't use leaning pose
-                # if get_distance(p[6], p[7], p[3], p[4]) > 6:
-            if (p[6] > p[3]) and (p[15] < p[3]): # rotated motion
-                if p[1] > p[4]:
-                    tmp.append(p)
-                    p_count += 1
+            if 1.3*get_distance(p[6], p[7], p[3], p[4]) >= get_distance(p[0], p[1], p[3], p[4]) and \
+                1.3*get_distance(p[15], p[16], p[3], p[4]) >= get_distance(p[0], p[1], p[3], p[4]):
+                if get_distance(p[6], p[7], p[3], p[4]) < 1.3*get_distance(p[15], p[16], p[3], p[4]) and \
+                    1.3*get_distance(p[6], p[7], p[3], p[4]) > get_distance(p[15], p[16], p[3], p[4]):
+                    if (p[6] > p[3]) and (p[15] < p[3]): # rotated motion
+                        if p[1] > p[4]:
+                            tmp.append(p)
+                            p_count += 1
         length.append(p_count)
     
     # convert list to np array
     tmp = np.array(tmp)
     # normalized with specific scale
-    normalized = preprocessing.normalize(tmp, norm='l2') * 50
+    normalized = preprocessing.normalize(tmp, norm='l2') * 100
     print('[INFO] Filtered poses: {}'.format(len(normalized)))
     # save explanded pose pickle 
     print('[INFO] Save l2 noramlized pose.')
@@ -242,7 +245,6 @@ def tgt_insts_normalize(tgt_insts):
     mean_val_pose = np.mean(normalized, axis=0)
     rig_sh_len_mean = get_distance(mean_val_pose[3], mean_val_pose[4], mean_val_pose[6], mean_val_pose[7])
     lef_sh_len_mean = get_distance(mean_val_pose[3], mean_val_pose[4], mean_val_pose[15], mean_val_pose[16])
-    neck_len_mean = get_distance(mean_val_pose[3], mean_val_pose[4], mean_val_pose[0], mean_val_pose[1])
 
     for pose in normalized:
         # ------------------- re-coordinate neck --------------------- #
@@ -258,7 +260,7 @@ def tgt_insts_normalize(tgt_insts):
     # save explanded pose pickle 
     print('[INFO] Save neck re-cordination.')
     torch.save(normalized, './processed_data/neck_loc.pickle')
-
+    # exit(-1)
     for pose in normalized:
         # ------------------- normalize shoulder --------------------- #
         rig_new_cor, rig_ratio = length_norm(pose[6], pose[7], pose[3], pose[4], rig_sh_len_mean)
@@ -289,10 +291,10 @@ def tgt_insts_normalize(tgt_insts):
         pose[22] += lef_diff_y
 
         # ------------------- normalize neck --------------------- #
-        # neck_new_cor, _ = length_norm(pose[0], pose[1], pose[3], pose[4],
-        #                        get_distance(pose[0], pose[1], pose[3], pose[4]) * rig_ratio)
         neck_new_cor, _ = length_norm(pose[0], pose[1], pose[3], pose[4],
-                               neck_len_mean)
+                               get_distance(pose[0], pose[1], pose[3], pose[4]) * rig_ratio)
+        # neck_new_cor, _ = length_norm(pose[0], pose[1], pose[3], pose[4],
+        #                        neck_len_mean)
         pose[0] = neck_new_cor[0]
         pose[1] = neck_new_cor[1]
         
@@ -335,7 +337,7 @@ def tgt_insts_normalize(tgt_insts):
     # save explanded pose pickle 
     print('[INFO] Save shoulder norm pose.')
     torch.save(normalized, './processed_data/sh_norm.pickle')
-    exit(-1)
+    # exit(-1)
     return normalized, length
 
 
@@ -379,15 +381,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-train_src', default="./data/ted_gesture_dataset_train.pickle")
     parser.add_argument('-valid_src', default="./data/ted_gesture_dataset_val.pickle")
-    parser.add_argument('-pose_dir', default="./processed_data/sh_norm.pickle")
+    parser.add_argument('-pose_dir', default="./processed_data/neck_loc.pickle")
     parser.add_argument('-data_size', default=10000)
-    parser.add_argument('-sample_rate', default=3)
+    parser.add_argument('-sample_rate', default=1)
     parser.add_argument('-save_data', default="./processed_data/preprocessing.pickle")
     parser.add_argument('-min_word_count', type=int, default=0)
     parser.add_argument('-pca_components', type=int, default=10)
     parser.add_argument('-emb_src', default="./data/glove.6B.300d.txt")
     
-    parser.add_argument('-mode', default='multi')
+    parser.add_argument('-mode', default='pca')
 
     opt = parser.parse_args()
 
@@ -397,7 +399,7 @@ def main():
     if opt.mode == 'pca':
         data = torch.load(opt.save_data)
         pca = data['pca']
-        factor = 0.7
+        factor = 3
     
         m_0 = np.diag([factor]*10)
         m_1 = np.diag([factor / 2]*10)
@@ -410,24 +412,19 @@ def main():
         plt.show()
         exit(-1)
     
-    elif opt.mode == 'multi':
+    elif opt.mode == 'display':
         poses = torch.load(opt.pose_dir)
-        # poses = [p for p in poses if (p[9] < -129)]
-        # p = poses[0]
-        # print("count: {}".format(len(poses)))
-        # print("sh_len:{}".format(get_distance(p[6], p[7], p[3], p[4])))
-        poses = random.sample(list(poses), k=30)
-        # poses = poses[:5]
-        display_multi_poses(np.array(poses), col=10)
-        plt.show()
-        exit(-1)
-
-    elif opt.mode == 'single':
-        poses = torch.load(opt.pose_dir)
-        poses = [p for p in poses if (p[6] < 0) or (p[15] > 0)]
-        
+        poses = [p for p in poses if (p[6] < 0.18)]
+        p = poses[0]
         print("count: {}".format(len(poses)))
-        display_pose(poses[0])
+        print("sh_len:{}".format(get_distance(p[6], p[7], p[3], p[4])))
+        # poses = random.sample(list(poses), k=30)
+        if len(poses) < 30:
+            poses = poses[:]
+            display_multi_poses(np.array(poses), col=1)
+        else:
+            poses = poses[:30]
+            display_multi_poses(np.array(poses), col=10)
         plt.show()
         exit(-1)
 
@@ -452,7 +449,7 @@ def main():
     print('[INFO] Build embedding table.')
     emb_tb = build_emb_table(opt.emb_src, word2idx)
 
-    print('[INFO] Convert source word instance into seq for word index')
+    print('[INFO] Convert source word instance into seq for word index.')
     train_src_insts = convert_instance_to_idx_seq(train_src_insts, word2idx)
     valid_src_insts = convert_instance_to_idx_seq(valid_src_insts, word2idx)
 
@@ -474,6 +471,10 @@ def main():
     print('[INFO] Dumping the processed data to pickle file: {}'.format(opt.save_data))
     torch.save(data, opt.save_data)
     print('[INFO] Finish.')
+
+
+def check_certain(src_inst, tgt_insts):
+    pass
 
 
 if __name__ == '__main__':

@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
+import seaborn as sns
+import pandas as pd
 
 from matplotlib import pyplot, transforms
 from matplotlib import animation, rc
@@ -112,12 +114,24 @@ def display_loss(log_train_file, log_vaild_file):
             except ValueError:
                 pass
 
-    plt.plot(loss_tr, '-r', label='train')
-    plt.plot(loss_vf, '-b', label='validation')
+    loss_df = pd.DataFrame({
+        'Epoch': [i for i in range(len(loss_tr))],
+        'Train_loss': loss_tr,
+        'Valid_loss': loss_vf
+    })  
+    #print(loss_df.head())
+    #exit(-1)
+    plt.figure(figsize=(15, 9))
+    sns.set_style('darkgrid')
+    sns.lineplot(data=loss_df, x='Epoch', y='Train_loss', label='Train')
+    sns.lineplot(data=loss_df, x='Epoch', y='Valid_loss', label='Valid')
+    
+#    plt.plot(loss_tr, '-r', label='train')
+ #   plt.plot(loss_vf, '-b', label='validation')
     plt.legend()
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.title('train vs. val loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Train vs. Valid loss')
 
 def main():
     parser = argparse.ArgumentParser()

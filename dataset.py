@@ -72,12 +72,11 @@ def paired_collate_fn(insts, opt):
     batch_tgt_seq = np.array([ 
                         np.vstack((inst, np.zeros((max_tgt_len - len(inst), inst.shape[1])))) 
                         for inst in tgt_insts])
-    
+
+    # dataset parsing
     src_seqs = []
     src_lens = []
     tgt_seqs = []
-    
-    # dataset parsing
     parse_iter = batch_src_seq.shape[1] - num_words_for_pre_motion
     for i in range(0, parse_iter, num_words_for_estimation):
         # get words chunk
@@ -99,12 +98,6 @@ def paired_collate_fn(insts, opt):
                 seq_l.append(1)
         
         sample_pos = batch_tgt_seq[:, i:i+tgt_len]
-
-        # transpose and append data
-        
-        # sample_seq = np.transpose(sample_seq, (1, 0))
-        # sample_pos = np.transpose(sample_pos, (1, 0, 2))
-
         src_seqs.append(torch.LongTensor(sample_seq))
         tgt_seqs.append(torch.LongTensor(sample_pos))
         src_lens.append(seq_l)
