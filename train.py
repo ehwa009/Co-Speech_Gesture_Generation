@@ -182,7 +182,7 @@ def main():
     parser.add_argument('-save_interval', type=int, default=10)
     parser.add_argument('-log', default='./log/')
     parser.add_argument('-lr', type=int, default=0.0001)
-    parser.add_argument('-chkpt', default='./trained_model/seq2pos_tr_loss_530_-1.191.chkpt')
+    parser.add_argument('-chkpt', default='./trained_model/seq2pos_tr_loss_540_-1.264.chkpt')
     
     # seq2pos args
     parser.add_argument('-alpha', type=int, default=0.1)
@@ -224,7 +224,7 @@ def main():
         model_info = torch.load(opt.chkpt)
         state = model_info['model']
         opt = model_info['settings']
-        opt.epoch = 541
+        opt.epoch = 601
         start_i = model_info['epoch']
 
         ############################################

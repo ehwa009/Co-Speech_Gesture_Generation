@@ -119,7 +119,6 @@ def build_vocab_idx(word_insts, min_word_count):
             word_count[word] += 1
     
     ignored_word_count = 0
-    
     for word, count in word_count.items():
         if word not in word2idx:
             if count > min_word_count:
@@ -127,8 +126,8 @@ def build_vocab_idx(word_insts, min_word_count):
             else:
                 ignored_word_count += 1
 
-    print('[INFO] Trimmed vocabulary size: {}\neach with minum occurrence: {}'.format(len(word2idx), min_word_count))
-    print('[INFO] Ignored word cound: {}'.format(ignored_word_count))
+    print('[INFO] Trimmed vocabulary size: {}\n\teach with minum occurrence: {}'.format(len(word2idx), min_word_count))
+    print('[INFO] Ignored word count: {}'.format(ignored_word_count))
 
     return word2idx
 
@@ -389,7 +388,7 @@ def main():
     parser.add_argument('-pca_components', type=int, default=10)
     parser.add_argument('-emb_src', default="./data/glove.6B.300d.txt")
     
-    parser.add_argument('-mode', default='pca')
+    parser.add_argument('-mode', default='preprocessing')
 
     opt = parser.parse_args()
 
@@ -435,6 +434,16 @@ def main():
     train_src_insts, train_tgt_insts = get_data(train_data, opt.sample_rate)
     valid_src_insts, valid_tgt_insts = get_data(val_data, opt.sample_rate)
 
+    print('[INFO] Build vocabulary.')
+    word2idx = build_vocab_idx(train_src_insts, opt.min_word_count)
+    
+    print('[INFO] Build embedding table.')
+    emb_tb = build_emb_table(opt.emb_src, word2idx)
+
+    print('[INFO] Convert source word instance into seq for word index.')
+    train_src_insts = convert_instance_to_idx_seq(train_src_insts, word2idx)
+    valid_src_insts = convert_instance_to_idx_seq(valid_src_insts, word2idx)
+
     print('[INFO] normalize target pose instance')
     norm_tr_tgt, tr_l = tgt_insts_normalize(train_tgt_insts)
     norm_val_tgt, val_l = tgt_insts_normalize(valid_tgt_insts)
@@ -442,16 +451,6 @@ def main():
     print('[INFO] Convert target pose instance into normalized pca values')
     pca, train_tgt_insts = run_PCA_train_tgt(norm_tr_tgt, tr_l, opt.pca_components)
     valid_tgt_insts = run_PCA_val_tgt(pca, norm_val_tgt, val_l, opt.pca_components)
-
-    print('[INFO] Build vocabulary.')
-    word2idx = build_vocab_idx(train_src_insts, opt.min_word_count)
-
-    print('[INFO] Build embedding table.')
-    emb_tb = build_emb_table(opt.emb_src, word2idx)
-
-    print('[INFO] Convert source word instance into seq for word index.')
-    train_src_insts = convert_instance_to_idx_seq(train_src_insts, word2idx)
-    valid_src_insts = convert_instance_to_idx_seq(valid_src_insts, word2idx)
 
     data = {
         'settings': opt,

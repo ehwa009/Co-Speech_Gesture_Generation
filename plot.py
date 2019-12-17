@@ -64,7 +64,7 @@ class Plot():
         return anim
 
     def save(self, ani, name):
-        writer = FFMpegWriter(fps=20, metadata=dict(artist='Me'), bitrate=1800)
+        writer = FFMpegWriter(fps=18, metadata=dict(artist='Me'), bitrate=1800)
         ani.save('{}'.format(name), writer=writer)
         print("[INFO] {}.mp4 file saved.".format(name))
 

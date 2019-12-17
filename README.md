@@ -1,4 +1,4 @@
-# Co-Speech_Gesture_Generation
+# Co-Speech Gesture Generation
 A PyTorch implementation of "Robots Learn Social Skills: End-to-End Learning of Co-Speech Gesture Generation for Humanoid Robots".
 ```
 @article{yoon2018robots,
@@ -10,15 +10,23 @@ A PyTorch implementation of "Robots Learn Social Skills: End-to-End Learning of 
 ```
 
 ---
-## Seq2pos model strucuture
+## Seq2pos Model Strucuture
 ![seq2pos](./figures/seq2pos_diagram.PNG)
 
 ---
-## TED dataset visualization
+## TED Dataset Visualization
  - The dataset was pre-processed by l2 norm, relocating neck coordination, and shoulder length normalization in order 
  - The below equation was used to nomralize shoulder length:
- ![sh_equation](./figures/equation_sh_norm.png)
 
+![sh_equation](./figures/equation_sh_norm.png)
+
+- After l2 norm
+![l2_norm](./figures/l2_norm.png)
+
+- After re-locating neck coordination
+![neck_reloc](./figures/neck_re_loc.png)
+
+- After normalizing shoulder length
 ![sh_norm](./figures/sh_len_norm.png)
 
 ---

@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 from matplotlib import pyplot, transforms
 from collections import namedtuple
@@ -13,6 +15,7 @@ import constant as Constant
 
 import matplotlib.pyplot as plt
 import math
+import random
 import re
 import time, sys, pickle
 
@@ -85,8 +88,9 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_530_-1.191.chkpt')
-    parser.add_argument('-ground_truth', type=bool, default=True)
+    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_570_-1.354.chkpt')
+    parser.add_argument('-ground_truth', type=bool, default=False)
+    parser.add_argument('-n_filter', type=int, default=3)
 
     arg = parser.parse_args()
 
@@ -94,21 +98,29 @@ def main():
     model_info = torch.load(arg.checkpoint)
 
     if arg.ground_truth:
-        index = 10
+        index = random.randrange(0, len(data['train']['src']))
         sample_src = data['train']['src'][index]
         sample_tgt = data['train']['tgt'][index]
         poses = np.zeros((len(sample_tgt), 24)) # to store the outputs
-        print('sample words: \n\t{}'.format(sample_src))
+        word = []
+        for src in sample_src:
+            for k, v in data['dict'].items():
+                if src == v:
+                    word.append(k)
+        print('selected index: {}'.format(index))
+        print('sample words: {} \n\t{}'.format(len(word), word))
+        print('pose length: {}'.format(len(sample_tgt)))
         
         start = 0
         for pose in sample_tgt:
             poses[start] = data['pca'].inverse_transform(pose)
             start += 1
         p = Plot((-7, 7), (-7, 7))
+        poses = pd.DataFrame(poses).rolling(arg.n_filter).mean()
+        poses = np.array(poses)
         anim = p.animate(poses, 80)
-        # anim.save("./figures/{}.mp4".format(sentence[:30]))
+        p.save(anim, "./videos/groud_truth.mp4")
         plt.show()
-        
         exit(-1)
 
 
@@ -190,14 +202,11 @@ def main():
 
 
     # inference
-    sentence = "look at the big world in front of you ,"
+    # sentence = "look at the big world in front of you ,"
     # sentence = "look at the small world in front of me ,"
     # sentence = "but what you hold in your hand leaves a bloody trail"
     # sentence = "and the most staggering thing of all of this, to me"
-    # sentence = '''One of the examples provided on the matplotlib example page is an animation of a double pendulum. 
-    # #             This example operates by precomputing the pendulum position over 10 seconds, and then animating the results. 
-    # #             I saw this and wondered if python would be fast enough to compute the dynamics on the fly. 
-    # #             It turns out it is'''
+    sentence = '''we reasoned that now that we can reactivate a memory what if we do so but then begin to tinker with that memory could we possibly even turn it into a false memory'''
     # sentence = "Witnesses told the Herald the brawl kicked off around 3pm and at one point a beer bottle was smashed over the head of a teen"
     
     words = normalized_string(sentence).split(' ')
@@ -207,7 +216,7 @@ def main():
     print("output pose frames: {}".format(poses.shape[0]))
     
     # we define offset to maximize gesture generated
-    offset = 1.0
+    offset = 1.5
 
     start = 0
     for out in outputs:
@@ -217,11 +226,19 @@ def main():
             poses[start] = data['pca'].inverse_transform(pose)
             start += 1
     
+    # save output poses
+    # torch.save(poses, "./videos/output.pickle")
+    # print("[INFO] output saved.")
+    # exit(-1)
+
     # plot class
     p = Plot((-7, 7), (-7, 7))
+    # mean average filtering
+    poses = pd.DataFrame(poses).rolling(arg.n_filter).mean()
+    poses = np.array(poses)
     anim = p.animate(poses, 100)
-    # anim.save("./figures/{}.mp4".format(sentence[:30]))
-    plt.show()
+    p.save(anim, "./videos/predict.mp4")
+    # plt.show()
 
 
 if __name__ == '__main__':
