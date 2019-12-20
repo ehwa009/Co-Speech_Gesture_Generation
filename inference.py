@@ -98,9 +98,9 @@ def main():
     model_info = torch.load(arg.checkpoint)
 
     if arg.ground_truth:
-        index = random.randrange(0, len(data['train']['src']))
-        sample_src = data['train']['src'][index]
-        sample_tgt = data['train']['tgt'][index]
+        index = random.randrange(0, len(data['valid']['src']))
+        sample_src = data['valid']['src'][index]
+        sample_tgt = data['valid']['tgt'][index]
         poses = np.zeros((len(sample_tgt), 24)) # to store the outputs
         word = []
         for src in sample_src:
@@ -120,7 +120,7 @@ def main():
         poses = np.array(poses)
         anim = p.animate(poses, 80)
         p.save(anim, "./videos/groud_truth.mp4")
-        plt.show()
+        # plt.show()
         exit(-1)
 
 
@@ -206,7 +206,7 @@ def main():
     # sentence = "look at the small world in front of me ,"
     # sentence = "but what you hold in your hand leaves a bloody trail"
     # sentence = "and the most staggering thing of all of this, to me"
-    sentence = '''we reasoned that now that we can reactivate a memory what if we do so but then begin to tinker with that memory could we possibly even turn it into a false memory'''
+    sentence = '''and men in general are physically stronger of course there are many exceptions laughter but today we live in a vastly different world the person more likely to lead is not the physically stronger person it is the more creative person the more intelligent person the more innovative person and there are no hormones for those attributes a man is as likely as a woman to be intelligent to be creative to be innovative we have evolved but it seems to me that our ideas of gender had not evolved some weeks ago i walked into a lobby of one of the best nigerian hotels i thought about naming the hotel but i thought i probably shouldnt and a guard at the entrance stopped me and asked me annoying questions because their automatic assumption is that a nigerian female walking into a hotel alone is a sex worker'''
     # sentence = "Witnesses told the Herald the brawl kicked off around 3pm and at one point a beer bottle was smashed over the head of a teen"
     
     words = normalized_string(sentence).split(' ')
@@ -216,7 +216,7 @@ def main():
     print("output pose frames: {}".format(poses.shape[0]))
     
     # we define offset to maximize gesture generated
-    offset = 1.5
+    offset = 1.8
 
     start = 0
     for out in outputs:
@@ -237,7 +237,7 @@ def main():
     poses = pd.DataFrame(poses).rolling(arg.n_filter).mean()
     poses = np.array(poses)
     anim = p.animate(poses, 100)
-    p.save(anim, "./videos/predict.mp4")
+    p.save(anim, "./videos/predict_test.mp4")
     # plt.show()
 
 

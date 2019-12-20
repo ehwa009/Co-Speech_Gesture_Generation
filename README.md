@@ -31,5 +31,6 @@ A PyTorch implementation of "Robots Learn Social Skills: End-to-End Learning of 
 
 ---
 ## Result
-- Model overfitting was observed.
+- Model overfitting was observed. 
+  But the model still is able to produce gesture output like Youngwoo.
 ![loss_graph](./log/loss.png)

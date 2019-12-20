@@ -62,9 +62,6 @@ def paired_collate_fn(insts, opt):
     tgt_len = opt.pre_motions + opt.estimation_motions
 
     # padding src seq
-    # batch_src_seq = np.array([ 
-    #                 [constant.UNK] * num_words_for_pre_motion + inst + [constant.PAD] * (max_src_len - len(inst)) 
-    #                 for inst in src_insts])
     batch_src_seq = np.array([ 
                         inst + [constant.PAD] * (max_src_len - len(inst)) 
                         for inst in src_insts])
@@ -107,21 +104,5 @@ def paired_collate_fn(insts, opt):
 
 def collate_fn(insts, opt):
     src_seqs_list, src_lens_list, tgt_seqs_list = paired_collate_fn(insts, opt)
-
-    src_pos_list = []
-    for src in src_seqs_list:
-        src_pos_list.append(
-            torch.LongTensor(np.array([
-                    [pos_i+1 if w_i != constant.PAD else 0
-                        for pos_i, w_i in enumerate(inst)]
-                            for inst in src])))
-    tgt_pos_list = []
-    for tgt in tgt_seqs_list:
-            tgt_pos_list.append(
-                torch.LongTensor(np.array([
-                    [pos_i+1 if not(np.array_equal(w_i, np.array([constant.PAD] * w_i.shape[0]))) 
-                            else 0
-                                for pos_i, w_i in enumerate(inst)]
-                                    for inst in tgt])))
                 
-    return zip(src_seqs_list, src_lens_list, src_pos_list, tgt_seqs_list, tgt_pos_list)
+    return zip(src_seqs_list, src_lens_list, tgt_seqs_list)

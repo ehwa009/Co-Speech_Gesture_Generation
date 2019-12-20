@@ -9,12 +9,11 @@ class EncoderLayer(nn.Module):
         self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
 
-    def forward(self, enc_input, non_pad_mask=None, slf_attn_mask=None):
-        enc_output, enc_slf_attn = self.slf_attn(enc_input, enc_input, enc_input, mask=slf_attn_mask)
-        enc_output *= non_pad_mask
-
+    def forward(self, enc_input, slf_attn_mask=None):
+        enc_output, enc_slf_attn = self.slf_attn(
+                                        enc_input, enc_input, 
+                                        enc_input, mask=slf_attn_mask)
         enc_output = self.pos_ffn(enc_output)
-        enc_output *= non_pad_mask
 
         return enc_output, enc_slf_attn
 
@@ -27,21 +26,17 @@ class DecoderLayer(nn.Module):
         self.enc_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
 
-    def forward(self, dec_input, enc_output, non_pad_mask=None, slf_attn_mask=None, dec_enc_attn_mask=None):
+    def forward(self, dec_input, enc_output, 
+            slf_attn_mask=None, dec_enc_attn_mask=None):
         # fisrt attn layer
         dec_output, dec_slf_attn = self.slf_attn(
                                         dec_input, dec_input, dec_input,
                                         mask=slf_attn_mask)
-        dec_output *= non_pad_mask
-
         # second attn layer
         dec_output, dec_enc_attn = self.enc_attn(
                                         dec_output, enc_output, enc_output,
                                         mask=dec_enc_attn_mask)
-        dec_output *= non_pad_mask
-
         # postion-wise ff network
         dec_ouput = self.pos_ffn(dec_output)
-        dec_ouput *= non_pad_mask
 
         return dec_ouput, dec_slf_attn, dec_enc_attn

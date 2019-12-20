@@ -1,11 +1,12 @@
 data/*.*
 log/*.*
 processed_data/*.*
-trained_model/*.*
+trained_model/
+trained_model_seq2pos
 __pycache__
 .vscode
 .idea
 .xml
 .ipynb_checkpoints
 torch2trt
-/videos
+*.ipynb

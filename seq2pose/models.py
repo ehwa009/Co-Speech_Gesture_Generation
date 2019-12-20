@@ -181,7 +181,7 @@ class Seq2Pose(nn.Module):
     def forward(self, opt, src_seq, src_len, tgt_seq, device):
         # transpose
         src_seq = src_seq.permute(1, 0)
-        tgt_seq = tgt_seq.permute(1, 0, 2)
+        tgt_seq = tgt_seq.permute(1, 0, 2) # s x b x 10
 
         enc_out, enc_hid = self.encoder(src_seq, src_len)
         dec_hid = enc_hid[:self.decoder.n_layers]
