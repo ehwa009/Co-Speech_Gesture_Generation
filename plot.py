@@ -135,7 +135,8 @@ def display_loss(log_train_file, log_vaild_file):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-model', default='seq2pos')
+    #parser.add_argument('-model', default='seq2pos')
+    parser.add_argument('-model', default='transformer')
     parser.add_argument('-log', default='./log/')
     opt = parser.parse_args()
 

@@ -14,6 +14,10 @@ A PyTorch implementation of "Robots Learn Social Skills: End-to-End Learning of 
 ![seq2pos](./figures/seq2pos_diagram.PNG)
 
 ---
+## Transformer Model Structure
+- TODO
+
+---
 ## TED Dataset Visualization
  - The dataset was pre-processed by l2 norm, relocating neck coordination, and shoulder length normalization in order 
  - The below equation was used to nomralize shoulder length:
@@ -33,4 +37,9 @@ A PyTorch implementation of "Robots Learn Social Skills: End-to-End Learning of 
 ## Result
 - Model overfitting was observed. 
   But the model still is able to produce gesture output like Youngwoo.
-![loss_graph](./log/loss.png)
+
+- Seq2pos loss
+![loss_graph](./log/loss_seq2pos.png)
+
+- Transformer loss 
+![loss_graph](./log/loss.png) 

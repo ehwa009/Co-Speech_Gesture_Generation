@@ -60,6 +60,7 @@ def train(model, training_data, validation_data, optim, device, opt, start_i=0):
                 log_vf.write('epoch,loss\n')
 
     valid_loss_list = []
+    train_loss_list = []
     for epoch_i in range(start_i, opt.epoch):
         print('[ Epoch: {} ]'.format(epoch_i))
 
@@ -67,12 +68,12 @@ def train(model, training_data, validation_data, optim, device, opt, start_i=0):
         train_loss = train_epoch(model, training_data, optim, device, opt)
         print('\t- (Training)   loss: {loss: 8.5f}, elapse: {elapse:3.3f}'.format(
                                     loss=train_loss, elapse=(time.time()-start)/60))
+        train_loss_list += [train_loss] 
 
         start = time.time()
         valid_loss = eval_epoch(model, validation_data, device, opt)
         print('\t- (Validation)   loss: {loss: 8.5f}, elapse: {elapse:3.3f}'.format(
                                     loss=valid_loss, elapse=(time.time()-start)/60))
-
         valid_loss_list += [valid_loss]
 
         # define parameter to save trained model
@@ -91,7 +92,7 @@ def train(model, training_data, validation_data, optim, device, opt, start_i=0):
                 torch.save(checkpoint, model_name)
             elif opt.save_mode == 'best':
                 model_name = opt.save_model + '.chkpt'
-                if valid_loss >= max(valid_loss_list):
+                if train_loss <= max(train_loss_list):
                     torch.save(checkpoint, model_name)
                     print('\t[INFO] The checkpoint file has been updated.')
             elif opt.save_mode == 'interval':
@@ -118,7 +119,7 @@ def eval_epoch(model, validation_data, device, opt):
         for batch in tqdm(validation_data, mininterval=2, desc=' - (Validation)', leave=False):
             batch_loss = 0
             n_motion = 0
-            for src_seq, src_len, src_pos, tgt_seq, tgt_pos in batch:
+            for src_seq, src_len, tgt_seq in batch:
                 src_seq = src_seq.to(device)
                 tgt_seq = tgt_seq.to(device)
                 # predict
@@ -178,42 +179,45 @@ def main():
 
     # common args
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-epoch', type=int, default=531)
-    parser.add_argument('-batch_size', type=int, default=128)
-    parser.add_argument('-n_workers', type=int, default=0)
+    parser.add_argument('-epoch', type=int, default=300)
+    parser.add_argument('-batch_size', type=int, default=256)
+    parser.add_argument('-n_workers', type=int, default=6)
     parser.add_argument('-dropout', type=int, default=0.1)
     parser.add_argument('-model', default='transformer')
     # parser.add_argument('-model', default='seq2pos')
-    parser.add_argument('-save_model', default=None)
-    parser.add_argument('-save_mode', default='interval')
+    parser.add_argument('-save_model', default='./trained_model/transformer')
+    parser.add_argument('-save_mode', default='best')
     parser.add_argument('-save_interval', type=int, default=10)
-    parser.add_argument('-log', default=False)
-    parser.add_argument('-lr', type=int, default=0.0001)
+    parser.add_argument('-log', default="./log/")
+    parser.add_argument('-lr', type=int, default=0.000001)
     parser.add_argument('-chkpt', default=False)
+    parser.add_argument('-alpha', type=int, default=0.1)
+    parser.add_argument('-beta', type=int, default=1)  
+    parser.add_argument('-pre_motions', type=int, default=10)
+    parser.add_argument('-estimation_motions', type=int, default=20)
+    parser.add_argument('-frame_duration', type=int, default=1/12)
+    parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps  
     
     # seq2pos args
-    parser.add_argument('-alpha', type=int, default=0.1)
-    parser.add_argument('-beta', type=int, default=1)
     parser.add_argument('-hidden_size', type=int, default=200)
     parser.add_argument('-bidirectional', type=bool, default=True)
     parser.add_argument('-tf_ratio', type=int, default=0.4)
     parser.add_argument('-n_enc_layers', type=int, default=2)
     parser.add_argument('-n_dec_layers', type=int, default=1)
-    parser.add_argument('-pre_motions', type=int, default=10)
-    parser.add_argument('-estimation_motions', type=int, default=20)
-    parser.add_argument('-frame_duration', type=int, default=1/12)
-    parser.add_argument('-speech_sp', type=int, default=2.5) # assume speech speed is 2.5 wps
-
+    
     # transformer args
-    parser.add_argument('-n_layers', type=int, default=6)
+    parser.add_argument('-n_layers', type=int, default=4)
     parser.add_argument('-d_enc_model', type=int, default=300)
-    parser.add_argument('-d_dec_model', type=int, default=300)
-    parser.add_argument('-d_inner_hid', type=int, default=512)
+    parser.add_argument('-d_dec_model', type=int, default=10)
+    parser.add_argument('-d_inner_hid', type=int, default=1024)
     parser.add_argument('-d_k', type=int, default=50)
     parser.add_argument('-d_v', type=int, default=50)
     parser.add_argument('-n_head', type=int, default=6)
+    parser.add_argument('-n_position', type=int, default=10)
     
     opt = parser.parse_args()
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     ############################################
     #             Loading Dataset              #
@@ -221,7 +225,7 @@ def main():
     data = torch.load(opt.data)
     
     opt.src_pad_idx = data['dict'][Constants.PAD_WORD]
-    opt.trg_pad_idx = 0 # temp
+    opt.trg_pad_idx = torch.zeros(data['pca'].n_components, device=device) # temp
 
     training_data, validation_data = prepare_dataloaders(data, opt)
     opt.scr_vocab_size = training_data.dataset.scr_vocab_size
@@ -229,7 +233,6 @@ def main():
     pp = pprint.PrettyPrinter(indent=4)
     pp.pprint(opt)
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if opt.chkpt:
         print('[INFO] continue train from checkpoint from:{}'.format(opt.chkpt))
@@ -248,6 +251,7 @@ def main():
                 emb_matrix=data['emb_tbl'],
                 n_src_vocab=opt.scr_vocab_size,
                 src_pad_idx = opt.src_pad_idx,
+                trg_pad_idx = opt.trg_pad_idx,
                 d_enc_model=opt.d_enc_model,
                 d_dec_model=opt.d_dec_model,
                 d_inner=opt.d_inner_hid,
@@ -285,6 +289,7 @@ def main():
             model = Transformer(
                 emb_matrix=data['emb_tbl'],
                 n_src_vocab=opt.scr_vocab_size,
+                trg_pad_idx=opt.trg_pad_idx,
                 src_pad_idx = opt.src_pad_idx,
                 d_enc_model=opt.d_enc_model,
                 d_dec_model=opt.d_dec_model,

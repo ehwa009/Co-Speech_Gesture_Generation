@@ -8,10 +8,10 @@ import random
 from transformer.layers import EncoderLayer, DecoderLayer
 
 
-class PostionalEncoding(nn.Module):
+class PositionalEncoding(nn.Module):
 
     def __init__ (self, d_hid, n_position=200):
-        super(PostionalEncoding, self).__init__()
+        super(PositionalEncoding, self).__init__()
         self.register_buffer('pos_table', self._get_sinusoid_encoding_table(n_position, d_hid))
 
     def _get_sinusoid_encoding_table(self, n_position, d_hid):
@@ -43,17 +43,21 @@ class PostionalEncoding(nn.Module):
 
 
 def get_pad_mask(seq, pad_idx):
-    return (seq != pad_idx).unsqueeze(-2)
+    if seq.dim() < 3:
+        return (seq != pad_idx).unsqueeze(1)
+    else: # Todo: implement without using for loop
+        mask = []
+        for i in range(seq.size(0)):
+            temp = []
+            for j in range(seq.size(1)):
+                temp.append(torch.all(seq[i, j, :] != pad_idx))
+            mask.append(temp)
+        return torch.tensor((mask), device=seq.device).unsqueeze(1)
 
 def get_subsequent_mask(seq):
-    sz_b, len_s = seq.size()
-    return _get_subsequent_mask(len_s, seq.device)
-
-
-def _get_subsequent_mask(len_s, device):
-    subsequent_mask = 1 - torch.triu(
-        torch.ones((1, len_s, len_s), device=device, dtype=torch.unit8), diagonal=1)
-
+    sz_b, len_s, sz_dim = seq.size()
+    subsequent_mask = (1 - torch.triu(
+        torch.ones((1, len_s, len_s), device=seq.device), diagonal=1)).bool()
     return subsequent_mask
 
 
@@ -67,7 +71,7 @@ class Encoder(nn.Module):
         # self.src_word_emb = nn.Embedding(n_src_vocab, d_word_vec, padding_idx=Constants.PAD)
         emb_matrix = torch.from_numpy(emb_matrix).float()
         self.src_word_emb = nn.Embedding.from_pretrained(emb_matrix, freeze=True)
-        self.postion_enc = PostionalEncoding(d_word_vec, n_position=n_position)
+        self.postion_enc = PositionalEncoding(d_word_vec, n_position=n_position)
         self.dropout = nn.Dropout(p=dropout)
         self.layer_stack = nn.ModuleList([
                         EncoderLayer(d_enc_model, d_inner, n_head, d_k, d_v, dropout=dropout)
@@ -98,34 +102,25 @@ class Decoder(nn.Module):
                 n_position=200, output_size=10):
         super().__init__()
         
-        self.position_enc = PostionalEncoding(d_motion_vec, n_position=n_position)
+        self.position_enc = PositionalEncoding(d_motion_vec, n_position=n_position)
         self.dropout = nn.Dropout(p=dropout)
-        self.pre = nn.Sequential(
-            nn.Linear(output_size, d_dec_model),
-            nn.BatchNorm1d(d_dec_model),
-            nn.ReLU(inplace=True)
-        )
         self.layer_stack = nn.ModuleList([
                     DecoderLayer(d_dec_model, d_inner, n_head, d_k, d_v, dropout=dropout)
                     for _ in range(n_layers)])
         self.layer_norm = nn.LayerNorm(d_dec_model, eps=1e-6)
-        self.out = nn.Linear(d_dec_model, output_size)
 
     def forward(self, trg_seq, trg_mask, enc_output, src_mask, return_attns=False):
         dec_slf_attn_list, dec_enc_attn_list = [], []
-        trg_seq = trg_seq.unsqueeze(1) # b x s x dim
-        # forwrad
-        dec_output = self.dropout(self.position_enc(trg_seq))
-        dec_output = dec_output.view(1, dec_output.size(0), -1) # 1 x batch x dim
-        dec_output = self.pre(dec_output.squeeze(0)).unsqueeze(1) # b x s x dim
+        
+        dec_output = self.dropout(self.position_enc(trg_seq.float()))
+        
         for dec_layer in self.layer_stack:
             dec_output, dec_slf_attn, dec_enc_attn = dec_layer(
-                dec_output, enc_output,
-                slf_attn_mask=trg_mask,
-                dec_enc_attn_mask=src_mask)
+                dec_output, enc_output, slf_attn_mask=trg_mask, dec_enc_attn_mask=src_mask)
+            dec_slf_attn_list += [dec_slf_attn] if return_attns else []
+            dec_enc_attn_list += [dec_enc_attn] if return_attns else []
+        
         dec_output = self.layer_norm(dec_output)
-        dec_output = dec_output.squeeze(1)
-        dec_output = self.out(dec_output)
             
         if return_attns:
             return dec_output, dec_slf_attn_list, dec_enc_attn_list
@@ -137,50 +132,41 @@ class Transformer(nn.Module):
 
     def __init__(
                 self, emb_matrix,
-                n_src_vocab, src_pad_idx, d_word_vec=300, d_enc_model=300, 
-                d_dec_model=10, d_motion_vec=10, d_inner=2048, n_layers=6, n_head=8, 
-                d_k=64, d_v=64, dropout=0.1, n_position=200):
+                n_src_vocab, src_pad_idx, trg_pad_idx, d_word_vec=300, d_enc_model=300, 
+                d_dec_model=10, d_motion_vec=10, d_inner=1024, n_layers=6, n_head=8, 
+                d_k=64, d_v=64, dropout=0.1, n_position=10):
         
         super().__init__()
+        
         self.src_pad_idx = src_pad_idx
+        self.trg_pad_idx = trg_pad_idx
         
         self.encoder = Encoder(
                 emb_matrix=emb_matrix, n_src_vocab=n_src_vocab, n_position=n_position, 
                 d_word_vec=d_word_vec, d_enc_model=d_enc_model, d_inner=d_inner, 
                 n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v, dropout=dropout)
-
+        
+        self.pad_linear = nn.Linear(d_enc_model, d_dec_model)
+        
         self.decoder = Decoder(
                 d_motion_vec=d_motion_vec, d_k=d_k, d_v=d_v, 
                 n_layers=n_layers, n_head=n_head, d_dec_model=d_dec_model, 
                 d_inner=d_inner, dropout=dropout)
 
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
     def forward(self, opt, src_seq, trg_seq, device):
         # forward encoder
         src_mask = get_pad_mask(src_seq, self.src_pad_idx)
-        enc_output, *_ = self.encoder(src_seq, src_mask)
-        
-        trg_seq = trg_seq.permute(1, 0, 2) # s x b x 10
-        # to save generated poses
-        all_decoder_outputs = torch.zeros(trg_seq.size(0), 
-                                            trg_seq.size(1), 
-                                            trg_seq.size(2)).to(device)
-        dec_in = trg_seq[0].float()
-        all_decoder_outputs[0] = dec_in
-        
-        # foward decoder
-        use_teacher_forcing = True if random.random() < opt.tf_ratio else False # set teacher forcing ratio
-        if use_teacher_forcing:
-            for di in range(1, len(trg_seq)):
-                dec_output, *_ = self.decoder(dec_in, None, enc_output, src_mask)
-                all_decoder_outputs[di] = dec_output
-                dec_in = trg_seq[di].float()
-        else:
-            for di in range(1, len(trg_seq)):
-                dec_output, *_ = self.decoder(dec_in, None, enc_output, src_mask)
-                all_decoder_outputs[di] = dec_output
-                dec_in = dec_output.float()
+        # trg_mask = get_pad_mask(trg_seq, self.trg_pad_idx) & get_subsequent_mask(trg_seq)
 
-        suc_p = all_decoder_outputs[-opt.estimation_motions:].transpose(0,1).float()
-        ans_p = trg_seq[-opt.estimation_motions:].transpose(0,1).float()
+        enc_output, *_ = self.encoder(src_seq, src_mask)
+        enc_output = self.pad_linear(enc_output)
+        dec_output, *_ = self.decoder(trg_seq, None, enc_output, src_mask)
+
+        suc_p = dec_output[:, -opt.estimation_motions:].float()
+        ans_p = trg_seq[:, -opt.estimation_motions:].float()
 
         return suc_p, ans_p

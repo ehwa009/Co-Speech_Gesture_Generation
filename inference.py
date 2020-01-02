@@ -10,6 +10,7 @@ from matplotlib import pyplot, transforms
 from collections import namedtuple
 from plot import Plot
 from seq2pose.models import Seq2Pose
+from transformer.models import Transformer, get_pad_mask, get_subsequent_mask
 
 import constant as Constant
 
@@ -21,7 +22,7 @@ import time, sys, pickle
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def inference(encoder, decoder, input_words, pre_motion_seq, opt, data):
+def inference(model, input_words, pre_motion_seq, opt, data):
     # make sure encoder and decoder be evaluation mode
     
     # +2 for SOS and EOS
@@ -43,44 +44,88 @@ def inference(encoder, decoder, input_words, pre_motion_seq, opt, data):
     input_seq = torch.from_numpy(input_seq).long().to(device)
     pre_motion_seq = torch.from_numpy(pre_motion_seq).float().to(device)
     
-    # encoding
-    encoder_outputs, encoder_hidden = encoder(input_seq, input_length, None)
-    decoder_hidden = encoder_hidden[:decoder.n_layers]
-    
-    target_length = opt.pre_motions + opt.estimation_motions
-    motion_output = np.array([])
-    attentions = torch.zeros((target_length, len(input_seq))) 
-    
-    # time step
-    for t in range(target_length):
-        if t < opt.pre_motions:
-            decoder_input = pre_motion_seq[t].unsqueeze(0).to(device).float()
-            decoder_output, decoder_hidden, attn_weight = decoder(decoder_input, 
-                                                                decoder_hidden,
-                                                                encoder_outputs)
-        else:
-            decoder_input = decoder_output
-            decoder_output, decoder_hidden, attn_weight = decoder(decoder_input, 
-                                                        decoder_hidden, 
-                                                        encoder_outputs)
-            decoder_input = decoder_output.float()
-            
-            if t == opt.pre_motions:
-                motion_output = decoder_output.data.cpu().numpy()
-            else:
-                motion_output = np.vstack((motion_output, decoder_output.data.cpu().numpy()))
+    if opt.model == 'seq2pos':
+        # encoding
+        encoder_outputs, encoder_hidden = model.encoder(input_seq, input_length, None)
+        decoder_hidden = encoder_hidden[:decoder.n_layers]
         
-        if attn_weight is not None:
-            attentions[t] = attn_weight.data
+        target_length = opt.pre_motions + opt.estimation_motions
+        motion_output = np.array([])
+        attentions = torch.zeros((target_length, len(input_seq))) 
+        
+        # time step
+        for t in range(target_length):
+            if t < opt.pre_motions:
+                decoder_input = pre_motion_seq[t].unsqueeze(0).to(device).float()
+                decoder_output, decoder_hidden, attn_weight = model.decoder(decoder_input, 
+                                                                    decoder_hidden,
+                                                                    encoder_outputs)
+            else:
+                decoder_input = decoder_output
+                decoder_output, decoder_hidden, attn_weight = model.decoder(decoder_input, 
+                                                            decoder_hidden, 
+                                                            encoder_outputs)
+                decoder_input = decoder_output.float()
+                
+                if t == opt.pre_motions:
+                    motion_output = decoder_output.data.cpu().numpy()
+                else:
+                    motion_output = np.vstack((motion_output, decoder_output.data.cpu().numpy()))
+            
+            if attn_weight is not None:
+                attentions[t] = attn_weight.data
+        
+        return motion_output, attentions
+    
+    elif opt.model == 'transformer':
+        input_seq = input_seq.transpose(0, 1)
+        pre_motion_seq = pre_motion_seq.view(1, -1, 10) # b x s x dim
+        pre_motion_seq = torch.zeros(1,30,10).to(device)
 
-    return motion_output, attentions
+        target_length = opt.pre_motions + opt.estimation_motions
+        
+        # forward encoder
+        input_mask = get_pad_mask(input_seq, opt.src_pad_idx)
+        enc_output, *_ = model.encoder(input_seq, input_mask)
+        
+        # forward pad dense layer
+        enc_output = model.pad_linear(enc_output)
+
+        dec_output = model.decoder(pre_motion_seq, None, enc_output, input_mask)
+        motion_output = dec_output[0].squeeze(0).data.cpu().numpy()
+
+        # # forward decoder
+        # for t in range(0, target_length, 10):
+        #     if t < opt.pre_motions:
+        #         dec_output, *_ = model.decoder(pre_motion_seq, None, enc_output, input_mask)
+        #     else:
+        #         decoder_input = dec_output
+        #         dec_output, *_ = model.decoder(decoder_input, None, enc_output, input_mask)
+        #         decoder_input = dec_output.float()
+                
+        #         if t == opt.pre_motions:
+        #             motion_output = dec_output.squeeze(0).data.cpu().numpy()
+        #         else:
+        #             motion_output = np.vstack((motion_output, dec_output.squeeze(0).data.cpu().numpy()))
+
+        return motion_output, None
+
+
+def _model_decode(decoder, trg_seq, enc_output, src_mask):
+    dec_output, *_ = decoder(trg_seq, None, enc_output, src_mask)
+    return dec_output
+
+
+def _get_init_state(encoder, decoder, init_seq, src_seq, src_mask):
+    enc_output, *_ = encoder(src_seq, src_mask)
+    dec_output = _model_decode(decoder, init_seq, enc_output, src_mask)
+    return enc_output, dec_output
 
 
 def normalized_string(sentence):
     sentence = sentence.lower()
     text = re.sub(r'[-=+.,*:]', '', sentence)
     text = text.strip()
-
     return text
 
 
@@ -88,7 +133,8 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', default='./processed_data/preprocessing.pickle')
-    parser.add_argument('-checkpoint', default='./trained_model/seq2pos_tr_loss_570_-1.354.chkpt')
+    # parser.add_argument('-checkpoint', default='./trained_model/trained_model_seq2pos/seq2pos_tr_loss_570_-1.354.chkpt')
+    parser.add_argument('-checkpoint', default='./trained_model/transformer.chkpt')
     parser.add_argument('-ground_truth', type=bool, default=False)
     parser.add_argument('-n_filter', type=int, default=3)
 
@@ -119,8 +165,8 @@ def main():
         poses = pd.DataFrame(poses).rolling(arg.n_filter).mean()
         poses = np.array(poses)
         anim = p.animate(poses, 80)
-        p.save(anim, "./videos/groud_truth.mp4")
-        # plt.show()
+        # p.save(anim, "./videos/groud_truth.mp4")
+        plt.show()
         exit(-1)
 
 
@@ -133,6 +179,24 @@ def main():
 
     if opt.model == 'transformer':
         print('[INFO] Transformer model selected.')
+        model = Transformer(
+                emb_matrix=data['emb_tbl'],
+                n_src_vocab=opt.scr_vocab_size,
+                src_pad_idx = opt.src_pad_idx,
+                trg_pad_idx = opt.trg_pad_idx,
+                d_enc_model=opt.d_enc_model,
+                d_dec_model=opt.d_dec_model,
+                d_inner=opt.d_inner_hid,
+                n_layers=opt.n_layers,
+                d_k=opt.d_k,
+                d_v=opt.d_v,
+                n_head=opt.n_head,
+                dropout=opt.dropout).to(device)
+        # load trained state
+        model.load_state_dict(state)
+        # turn model into evaluation mode
+        model.eval()
+    
     elif opt.model == 'seq2pos':
         print('[INFO] Seq2Pos model selected.')
         model = Seq2Pose(
@@ -144,15 +208,10 @@ def main():
                 bidirectional=opt.bidirectional,
                 dropout=opt.dropout,
                 out_dim = data['pca'].n_components).to(device)
-        
-    # load trained state
-    model.load_state_dict(state)
-
-    # turn model into evaluation mode
-    model.eval()
-
-    encoder = model.encoder
-    decoder = model.decoder
+        # load trained state
+        model.load_state_dict(state)
+        # turn model into evaluation mode
+        model.eval()
 
     def infer_from_words(words, sp_duration=None):
         start = time.time()
@@ -178,45 +237,44 @@ def main():
         output_tuple = namedtuple('InferenceOutput', ['words', 'pre_motion_seq', 'out_motion', 'attention'])
         
         # previous motion seq
-        pre_motion_seq = np.zeros((opt.pre_motions, data['pca'].n_components))
+        # pre_motion_seq = np.zeros((opt.pre_motions, data['pca'].n_components))
+        pre_motion_seq = np.zeros((30, data['pca'].n_components))
 
         # to store motion outputs
         outputs = []
         for i in range(0, len(padded_words) - num_words_for_pre_motion, num_words_for_estimation):
             sample_words = padded_words[i:i + num_words_for_pre_motion + num_words_for_estimation]
-            
             with torch.no_grad():
                 output, attention = inference(
-                                        encoder=encoder,
-                                        decoder=decoder,
+                                        model=model,
                                         input_words=sample_words,
                                         pre_motion_seq=pre_motion_seq,
                                         opt=opt,
                                         data=data)
+                
                 outputs.append(output_tuple(sample_words, pre_motion_seq, output, attention))
-
-                # set previous 10 motions as a next intput
-                pre_motion_seq = np.asarray(output)[-opt.pre_motions:, :]
-            
+                # pre_motion_seq = np.asarray(output)[-opt.pre_motions:, :]
+                pre_motion_seq = np.asarray(output)[:]
+                
         return outputs
 
 
     # inference
     # sentence = "look at the big world in front of you ,"
-    # sentence = "look at the small world in front of me ,"
+    sentence = "look at the small world in front of me ,"
     # sentence = "but what you hold in your hand leaves a bloody trail"
     # sentence = "and the most staggering thing of all of this, to me"
-    sentence = '''and men in general are physically stronger of course there are many exceptions laughter but today we live in a vastly different world the person more likely to lead is not the physically stronger person it is the more creative person the more intelligent person the more innovative person and there are no hormones for those attributes a man is as likely as a woman to be intelligent to be creative to be innovative we have evolved but it seems to me that our ideas of gender had not evolved some weeks ago i walked into a lobby of one of the best nigerian hotels i thought about naming the hotel but i thought i probably shouldnt and a guard at the entrance stopped me and asked me annoying questions because their automatic assumption is that a nigerian female walking into a hotel alone is a sex worker'''
+    # sentence = '''and men in general are physically stronger of course there are many exceptions laughter but today we live in a vastly different world the person more likely to lead is not the physically stronger person it is the more creative person the more intelligent person the more innovative person and there are no hormones for those attributes a man is as likely as a woman to be intelligent to be creative to be innovative we have evolved but it seems to me that our ideas of gender had not evolved some weeks ago i walked into a lobby of one of the best nigerian hotels i thought about naming the hotel but i thought i probably shouldnt and a guard at the entrance stopped me and asked me annoying questions because their automatic assumption is that a nigerian female walking into a hotel alone is a sex worker'''
     # sentence = "Witnesses told the Herald the brawl kicked off around 3pm and at one point a beer bottle was smashed over the head of a teen"
     
     words = normalized_string(sentence).split(' ')
     outputs = infer_from_words(words)
 
-    poses = np.zeros((len(outputs)*20, 24)) # to store the outputs
+    poses = np.zeros((len(outputs)*30, 24)) # to store the outputs
     print("output pose frames: {}".format(poses.shape[0]))
     
     # we define offset to maximize gesture generated
-    offset = 1.8
+    offset = 1.0
 
     start = 0
     for out in outputs:
@@ -236,7 +294,7 @@ def main():
     # mean average filtering
     poses = pd.DataFrame(poses).rolling(arg.n_filter).mean()
     poses = np.array(poses)
-    anim = p.animate(poses, 100)
+    anim = p.animate(poses, 100000)
     p.save(anim, "./videos/predict_test.mp4")
     # plt.show()
 
